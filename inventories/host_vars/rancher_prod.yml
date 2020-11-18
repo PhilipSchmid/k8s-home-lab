@@ -1,0 +1,65 @@
+---
+# Rancher API Key
+custom_k8s_cluster_api_key: ""
+# Rancher API Host
+custom_k8s_cluster_rancher_host: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32613066393638303336613863626363373561363766653634363734346231643631313262393866
+          6432343866393839616661626437376334336362376164310a363565316238633639393165626166
+          33393930616163623838326234326161363233646336663838333039663664666164653839313539
+          3734323939663231340a326163393032333935303739623364313366626361623563666137633766
+          39616465323036386437376563343033356266636136613836383462303431396464
+custom_k8s_cluster_rancher_api: "https://{{ custom_k8s_cluster_rancher_host }}/v3"
+custom_k8s_cluster_verify_ssl: yes
+custom_k8s_cluster_self_signed_certificate: false
+custom_k8s_cluster_ca_checksum_param: "{{ '--ca-checksum' if custom_k8s_cluster_self_signed_certificate else '' }}"
+
+# Cluster Name, defaults to the inventory Name [custom_k8s_clusters] Ansible Group without the 'rancher_' Prefix
+# As Cluster in Rancher cannot use _ in Names, we need to replace it with -
+custom_k8s_cluster_name: "{{ inventory_hostname | regex_replace('rancher_') | regex_replace('_','-') }}"
+custom_k8s_cluster_group_inventory_name: "{{ inventory_hostname | regex_replace('rancher_') }}"
+
+# Enable Pod Security Policy
+custom_k8s_cluster_enable_psp: true
+# Default Pod Security Policy
+custom_k8s_clusters_default_psp: restricted
+# Enable Network Segregation between Projects
+custom_k8s_cluster_enable_network_policy: true
+# Kubernetes Version
+custom_k8s_cluster_kubernetes_version: v1.19.3-rancher1-1
+# Ingress Provider (none, nginx)
+custom_k8s_clusters_ingress_provider: none
+
+# Rancher Agent to be used
+custom_k8s_cluster_agent_version: v2.5.1
+
+# Base command for the Ranger Agent
+custom_k8s_cluster_docker_commmand_base: "docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes -v /var/run:/var/run rancher/rancher-agent:{{ custom_k8s_cluster_agent_version}} --server https://{{ custom_k8s_cluster_rancher_host }}"
+
+# Internal Interface
+# See https://rancher.com/docs/rke/latest/en/config-options/nodes/#internal-address
+# & https://rancher.com/docs/rancher/v2.x/en/cluster-provisioning/rke-clusters/custom-nodes/agent-options/#ip-address-options
+custom_k8s_cluster_ingress_node_internal_iface: eth0
+
+custom_k8s_cluster_use_fqdn_nodename: false
+
+keepalived_enabled: true
+keepalived_private_only: true
+keepalived_ipv4_only: true
+keepalived_setup_env: local
+keepalived_image: puzzle/keepalived:2.0.20
+keepalived_private_failover_track_interface_ip: eth0
+keepalived_private_failover_ip:
+  - vip: 192.168.122.30
+    router_id: 2
+    master: k8s-node-4
+    password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          62656332343863643935323065636136646534373031613136343336643063636539326331643863
+          3165653938386665623038396531386461663263306635340a343632393431613138346636393332
+          36613334376266346632633439636230663534326637356237343366376138356232623135353637
+          6663383061393534640a333539646533333035323065393832623239393664383964633263376635
+          35626538386539353339366638663563633439366661616261313262333362656336
+keepalived_private_ipv4_node_group: "{{ groups[custom_k8s_cluster_group_inventory_name + '_master'] }}"
+keepalived_public_ipv4_node_group: "{{ groups[custom_k8s_cluster_group_inventory_name + '_ingress'] }}"
+keepalived_public_ipv6_node_group: "{{ groups[custom_k8s_cluster_group_inventory_name + '_ingress'] }}"

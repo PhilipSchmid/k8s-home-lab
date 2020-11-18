@@ -1,0 +1,36 @@
+### Special Groups for RKE & Rancher cluster ###
+# Dummy Hosts representing a cluster
+
+[custom_k8s_clusters]
+rancher_prod # Belongs to Ansible Group prod
+
+[rke_rancher_clusters]
+rancher_cp # Belongs to Ansible Group rke_rancher_cp
+
+### Hosts
+
+[rancher_k8s_nodes:children]
+rke_rancher_cp
+prod
+
+[prod:children]
+prod_master
+prod_worker
+
+[prod_master]
+k8s-node-1          ip_address=192.168.122.21
+k8s-node-2          ip_address=192.168.122.22
+k8s-node-3          ip_address=192.168.122.23
+
+[prod_worker]
+k8s-node-4          ip_address=192.168.122.31
+k8s-node-5          ip_address=192.168.122.32
+k8s-node-6          ip_address=192.168.122.33
+
+[rke_rancher_cp]
+rancher-cp-node-1   ip_address=192.168.122.11
+rancher-cp-node-2   ip_address=192.168.122.12
+rancher-cp-node-3   ip_address=192.168.122.13
+
+[hypervisor]
+commander.0x707363.ch

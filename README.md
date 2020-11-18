@@ -7,7 +7,6 @@ Currently there's only a rough plan about which technologies should be used for 
 | What | Technology |
 |---|---|
 | DNS Provider | DigitalOcean |
-|  | DigitalOcean |
 | Hypervisor | Qemu-KVM (VT-x is enabled) |
 | Hypervisor OS (Intel NUC) | CentOS 8 |
 | Control Plane | Rancher (HA mode) |
@@ -40,7 +39,19 @@ In my case I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core
 ## Topology
 ![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
 
-## Getting Started
+## Prerequisites
+### Ansible Environment
+```bash
+pip3 install --user pipenv
+pipenv shell --three
+pipenv install
+ansible-galaxy install -r requirements.yml
+```
 
 ### Hypervisor
 TODO
+
+## Getting Started
+```bash
+
+```

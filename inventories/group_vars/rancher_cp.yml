@@ -1,5 +1,0 @@
-ansible_user: centos
-k8s_roles:
-- controlplane
-- etcd
-- worker

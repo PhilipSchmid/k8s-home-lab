@@ -1,4 +1,0 @@
-ansible_user: localadmin
-k8s_labels:
-- name: environment
-  value: vagrant

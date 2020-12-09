@@ -30,7 +30,20 @@ In my case I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core
 
 ## Prerequisites
 
+### Host OS
+Download and install Red Hat 8 server from https://developers.redhat.com/topics/linux. After creating a free developer account, you will be able to run 1 Red Hat enterprise server for free (development use only).
+
+### Kubectl, Helm & RKE2
+Install `kubectl`, `helm` and RKE2 to the host system:
+```bash
+
+```
+
+### VPN Remote Access to the Host via Wireguard (optional)
+See https://gist.github.com/PhilipSchmid/b2ac0774fa99ec1286d63d2307a570a3 for more information.
+
 ## Getting Started
+### RKE2 Setup
 ```bash
 
 ```

@@ -151,7 +151,7 @@ Create a RKE2 config file (`/etc/rancher/rke2/config.yaml`) with the following c
 ```yaml
 write-kubeconfig-mode: "0644"
 tls-san:
-  - "k8s.0x707363.ch"
+  - "k8s.example.com"
 # Make a etcd snapshot every 6 hours
 etcd-snapshot-schedule-cron: " */6 * * *"
 # Keep 56 etcd snapshorts (equals to 2 weeks with 6 a day)
@@ -233,7 +233,7 @@ Verification:
 ```bash
 [user@commander tmp]$ kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
-commander.0x707363.ch   Ready    etcd,master   5m13s   v1.18.13+rke2r1
+commander.example.com   Ready    etcd,master   5m13s   v1.18.13+rke2r1
 ```
 
 # Basic Infrastructure Components
@@ -289,13 +289,13 @@ hubble:
     ingress:
       enabled: true
       hosts:
-        - hubble.0x707363.ch
+        - hubble.example.com
       annotations:
         cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
       tls:
       - secretName: letsencrypt-hubble-ui
         hosts:
-        - hubble.0x707363.ch 
+        - hubble.example.com 
 
   relay:
     enabled: true
@@ -488,7 +488,7 @@ metadata:
   name: lets-encrypt-dns01-staging-do
 spec:
   acme:
-    email: me@0x707363.ch
+    email: me@example.com
     server: https://acme-staging-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: letsencrypt-stag
@@ -505,7 +505,7 @@ metadata:
   name: lets-encrypt-dns01-production-do
 spec:
   acme:
-    email: me@0x707363.ch
+    email: me@example.com
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: letsencrypt-prod
@@ -543,7 +543,7 @@ Create a `values.yaml` file with the following configuration:
 ```yaml
 provider: digitalocean
 domainFilters:
-- "0x707363.ch"
+- "example.com"
 digitalocean:
   apiToken: "access-token here"
 ```

@@ -1,8 +1,8 @@
 # K8s Home Lab
 This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
-## Technologies
-Currently there's only a rough plan about which technologies should be used for this setup. The list down here will definitely change as soon as the project progresses.
+# Technologies
+Currently there's only a rough plan about which technologies should be used for this setup. The table down here will definitely change as soon as the project progresses.
 
 | What | Technology |
 |---|---|
@@ -11,29 +11,74 @@ Currently there's only a rough plan about which technologies should be used for 
 | Distributon | Rancher (RKE2) |
 | CRI | containerd (included in RKE2) |
 | CNI | Cilium |
-| CSI | NFS / DigitalOcean |
+| CSI | NFS-Client Provisioner |
 | Certificate Handling | Cert-Manager with Let's Encrypt (DNS Challenge) |
 | Ingress Controller | Nginx |
-| ETCD Backup | RKE2's S3 Backup Capability (to DigitalOcean Spaces) |
 | Data Backup | Kanister |
 | App Deployment | Helm & mostly ArgoCD |
 | Logging | Grafana Loki (via Rancher Logging) |
 | Registry | Harbor |
 
-## Hardware
+# Table of Content
+- [K8s Home Lab](#k8s-home-lab)
+- [Technologies](#technologies)
+- [Table of Content](#table-of-content)
+- [Hardware](#hardware)
+- [Topology](#topology)
+- [Prerequisites](#prerequisites)
+  - [Host OS](#host-os)
+    - [Disable Swap](#disable-swap)
+  - [Working Directory](#working-directory)
+  - [Kubectl, Helm & RKE2](#kubectl-helm--rke2)
+  - [VPN Remote Access to the Host via Wireguard (optional)](#vpn-remote-access-to-the-host-via-wireguard-optional)
+- [K8s Cluster Setup](#k8s-cluster-setup)
+  - [RKE2 Setup](#rke2-setup)
+    - [Basic Configuration](#basic-configuration)
+    - [Firewall](#firewall)
+  - [Starting RKE2](#starting-rke2)
+  - [Configure Kubectl (on RKE2 Host)](#configure-kubectl-on-rke2-host)
+- [Basic Infrastructure Components](#basic-infrastructure-components)
+  - [Networking using Cilium (CNI)](#networking-using-cilium-cni)
+    - [Cilium Prerequisites](#cilium-prerequisites)
+    - [Cilium Installation](#cilium-installation)
+  - [Persistent Storage using NFS-Client Provisioner](#persistent-storage-using-nfs-client-provisioner)
+    - [NFS-Client Provisioner Prerequisites](#nfs-client-provisioner-prerequisites)
+    - [NFS-Client Provisioner Installation](#nfs-client-provisioner-installation)
+- [Infrastructure related Components](#infrastructure-related-components)
+  - [Deploy Nginx Ingress Controller](#deploy-nginx-ingress-controller)
+    - [Nginx Ingress Controller Prerequisites](#nginx-ingress-controller-prerequisites)
+    - [Nginx Ingress Controller Installation](#nginx-ingress-controller-installation)
+  - [Cert-Manager](#cert-manager)
+    - [Cert-Manager Prerequisites](#cert-manager-prerequisites)
+    - [Cert-Manager Installation](#cert-manager-installation)
+    - [Let's Encrypt DNS-Challenge DigitalOcean ClusterIssuer](#lets-encrypt-dns-challenge-digitalocean-clusterissuer)
+  - [External-DNS](#external-dns)
+    - [External-DNS Prerequisites](#external-dns-prerequisites)
+    - [External-DNS Installation](#external-dns-installation)
+  - [Prometheus Monitoring](#prometheus-monitoring)
+  - [Logging with Loki](#logging-with-loki)
+  - [Kanister Backup & Restore](#kanister-backup--restore)
+  - [GitOps using ArgoCD](#gitops-using-argocd)
+  - [Deploy Kubernetes Dashboard](#deploy-kubernetes-dashboard)
+- [Application Components](#application-components)
+  - [Harbor Registry](#harbor-registry)
+- [Optional Components](#optional-components)
+  - [Secret replication using Emberstack Reflector](#secret-replication-using-emberstack-reflector)
+
+# Hardware
 One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS/S3/storage service from DigitalOcean.
 
 In my case I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core(TM) i7-10710U CPU @ 1.10GHz`) and 64 GB memory (`2 x 32 GB DDR4-2666`).
 
-## Topology
+# Topology
 ![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
 
-## Prerequisites
+# Prerequisites
 
-### Host OS
+## Host OS
 Download and install Red Hat 8 server from https://developers.redhat.com/topics/linux. After creating a free developer account, you will be able to run 1 Red Hat enterprise server for free (development use only).
 
-#### Disable Swap
+### Disable Swap
 ```
 free -h
 sudo swapoff -a
@@ -41,14 +86,14 @@ sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
 free -h
 ```
 
-### Working Directory
+## Working Directory
 Create a working directory where e.g. Helm `values.yaml` files will be stored in the future:
 ```bash
 mkdir ~/rke2
 cd ~/rke2
 ```
 
-### Kubectl, Helm & RKE2
+## Kubectl, Helm & RKE2
 Install `kubectl`, `helm` and RKE2 to the host system:
 ```bash
 BINARY_DIR="/usr/local/bin"
@@ -95,13 +140,13 @@ Sources:
 - https://docs.rke2.io/install/methods/#rpm
 - https://kubernetes.io/docs/tasks/tools/install-kubectl/#optional-kubectl-configurations
 
-### VPN Remote Access to the Host via Wireguard (optional)
+## VPN Remote Access to the Host via Wireguard (optional)
 See https://gist.github.com/PhilipSchmid/b2ac0774fa99ec1286d63d2307a570a3 for more information.
 
-## Getting Started
-### RKE2 Setup
+# K8s Cluster Setup
+## RKE2 Setup
 
-#### Basic Configuration
+### Basic Configuration
 Create a RKE2 config file (`/etc/rancher/rke2/config.yaml`) with the following content:
 ```yaml
 write-kubeconfig-mode: "0644"
@@ -116,7 +161,7 @@ disable:
   - rke2-ingress-nginx
 ```
 
-#### Firewall
+### Firewall
 Ensure to open the required ports:
 ```bash
 ### RKE2 specific ports
@@ -165,7 +210,7 @@ Source:
 - https://docs.rke2.io/install/requirements/#networking
 
 
-### Start RKE2
+## Starting RKE2
 Enable the `rke2-server` service and start it:
 ```bash
 sudo systemctl enable rke2-server --now
@@ -177,7 +222,7 @@ Verification:
 [user@commander tmp]$ sudo journalctl -u rke2-server -f
 ```
 
-### Configure Kubectl (on RKE2 Host)
+## Configure Kubectl (on RKE2 Host)
 ```bash
 mkdir ~/.kube
 cp /etc/rancher/rke2/rke2.yaml ~/.kube/config
@@ -191,9 +236,11 @@ NAME                    STATUS   ROLES         AGE     VERSION
 commander.0x707363.ch   Ready    etcd,master   5m13s   v1.18.13+rke2r1
 ```
 
-### Deploy Cilium (CNI)
+# Basic Infrastructure Components
 
-#### Cilium Prerequisites
+## Networking using Cilium (CNI)
+
+### Cilium Prerequisites
 
 Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):
 ```
@@ -220,7 +267,7 @@ helm repo update
 Sources:
 - https://docs.cilium.io/en/stable/operations/system_requirements/#mounted-ebpf-filesystem
 
-#### Cilium Installation
+### Cilium Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
 hubble:
@@ -287,10 +334,53 @@ Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
 
-### Deploy Nginx Ingress Controller
+## Persistent Storage using NFS-Client Provisioner
+Used to provide persistent storage via NFS from the Synology NAS. It creates sub directories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).
+
+Sources:
+- https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
+- https://artifacthub.io/packages/helm/ckotzbauer/nfs-client-provisioner
+
+### NFS-Client Provisioner Prerequisites
+Since the official helm chart [repository is deprected](https://github.com/helm/charts#%EF%B8%8F-deprecation-and-archive-notice) and no official successor of the NFS-client provisioner Helm chart is provided, we simply use [ckotzbauer/nfs-client-provisioner](https://artifacthub.io/packages/helm/ckotzbauer/nfs-client-provisioner).
+
+```bash
+mkdir ~/rke2/nfs-client-provisioner
+helm repo add ckotzbauer https://ckotzbauer.github.io/helm-charts
+helm repo update
+```
+
+### NFS-Client Provisioner Installation
+Create a `values.yaml` file with the following configuration:
+```yaml
+nfs:
+  server: <nfs-server-ip-here>
+  path: /volume1/nfs
+
+storageClass:
+  create: true
+  defaultClass: true
+  name: nfs-client
+  accessModes: ReadWriteMany
+
+podSecurityPolicy:
+  enabled: true
+```
+
+Finally install the Nginx ingress controller helm chart:
+```bash
+helm upgrade -i --create-namespace --atomic nfs-client-provisioner ckotzbauer/nfs-client-provisioner \
+  --version 1.0.2 \
+  --namespace nfs-client \
+  -f values.yaml
+```
+
+# Infrastructure related Components
+
+## Deploy Nginx Ingress Controller
 The Nginx ingress controller is deployed as Daemonset within the host network namespace. This way the Nginx ingress controller is able to see the actual client IP where this would not be possible without any workarounds when the Nginx ingress controller would be deployed as Deployment outside of the host's network namespace.
 
-#### Nginx Ingress Controller Prerequisites
+### Nginx Ingress Controller Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
 mkdir ~/rke2/ingress-nginx
@@ -298,7 +388,7 @@ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 ```
 
-#### Nginx Ingress Controller Installation
+### Nginx Ingress Controller Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
 controller:
@@ -339,9 +429,9 @@ Sources:
 - https://github.com/kubernetes/ingress-nginx/tree/master/charts/ingress-nginx
 - https://github.com/kubernetes/ingress-nginx/blob/master/charts/ingress-nginx/values.yaml
 
-### Cert-Manager
+## Cert-Manager
 
-#### Cert-Manager Prerequisites
+### Cert-Manager Prerequisites
 Install the required CRDs:
 ```
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.crds.yaml
@@ -353,7 +443,7 @@ helm repo add jetstack https://charts.jetstack.io
 helm repo update
 ```
 
-#### Cert-Manager Installation
+### Cert-Manager Installation
 Install the Cert-Manager controller helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
@@ -373,7 +463,7 @@ cert-manager-webhook-756d477cc4-8pj2l      1/1     Running   0          14s
 Sources:
 - https://cert-manager.io/docs/installation/kubernetes/#installing-with-helm
 
-#### Let's Encrypt DNS-Challenge DigitalOcean ClusterIssuer
+### Let's Encrypt DNS-Challenge DigitalOcean ClusterIssuer
 Crete a Cert-Manager ClusterIssuer, which is able to issue Let's Encrypt certificates using the DNS01 challenge via DigitalOcean.
 
 ```bash
@@ -436,10 +526,10 @@ Sources:
 - https://cert-manager.io/docs/configuration/acme/dns01/
 - https://cert-manager.io/docs/configuration/acme/dns01/digitalocean/
 
-### External-DNS
+## External-DNS
 Used to automatically create new DNS A records for new Ingress objects (on DigitalOcean).
 
-#### External-DNS Prerequisites
+### External-DNS Prerequisites
 Prepare & add the Helm chart repo:
 
 ```bash
@@ -448,7 +538,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 ```
 
-#### External-DNS Installation
+### External-DNS Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
 provider: digitalocean
@@ -475,30 +565,32 @@ Sources:
 - https://github.com/kubernetes-sigs/external-dns
 - https://github.com/bitnami/charts/tree/master/bitnami/external-dns
 
-### Deploy Rancher (version 2.5+)
+
+## Prometheus Monitoring
 TODO
 
-### Persistent Storage
+## Logging with Loki
 TODO
 
-### Prometheus Monitoring
+## Kanister Backup & Restore
 TODO
 
-### Harbor Registry
+## GitOps using ArgoCD
 TODO
 
-### Logging with Loki
+## Deploy Kubernetes Dashboard
 TODO
 
-### Kanister Backup & Restore
+
+# Application Components
+
+## Harbor Registry
 TODO
 
-### GitOps using ArgoCD
-TODO
 
-## Optional Components
+# Optional Components
 
-### Secret replication using Emberstack Reflector
+## Secret replication using Emberstack Reflector
 Used to reflect secrets to other namespaces.
 
 **Not used at the moment!**

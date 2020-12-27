@@ -676,7 +676,7 @@ Sources:
 Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which is able to backup/restore all K8s and CRD resources that Rancher creates and manages.
 Backup target can be a Persistent Volume or a S3 bucket.
 
-
+TODO
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/
@@ -769,6 +769,8 @@ Finally apply the ConfigMap:
 ```bash
 kubectl apply -f grafana-cilium-dashboards-cm.yaml
 ```
+
+![Cilium v1.9 Agent Metrics Grafana Dashboard](images/cilium-agent-metrics-grafana.png)
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/migrating/#migrating-grafana-dashboards

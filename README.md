@@ -60,6 +60,7 @@ Currently there's only a rough plan about which technologies should be used for 
     - [Rancher Prerequisites](#rancher-prerequisites)
     - [Rancher Installation](#rancher-installation)
     - [Rancher Backup & Restore](#rancher-backup--restore)
+    - [Rancher Monitoring](#rancher-monitoring)
   - [Logging with Loki](#logging-with-loki)
   - [Kanister Backup & Restore](#kanister-backup--restore)
   - [GitOps using ArgoCD](#gitops-using-argocd)
@@ -175,6 +176,8 @@ sudo firewall-cmd --add-port=10250/tcp --permanent
 sudo firewall-cmd --add-port=2379/tcp --permanent
 sudo firewall-cmd --add-port=2380/tcp --permanent
 sudo firewall-cmd --add-port=30000-32767/tcp --permanent
+# Used for the Rancher Monitoring
+sudo firewall-cmd --add-port=9796/tcp --permanent
 ### CNI specific ports
 # 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows
 sudo firewall-cmd --add-port=4244/tcp --permanent
@@ -652,8 +655,25 @@ Sources:
 Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which is able to backup/restore all K8s and CRD resources that Rancher creates and manages.
 Backup target can be a Persistent Volume or a S3 bucket.
 
+
+
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/
+
+### Rancher Monitoring
+Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use it this way.
+
+Navigate to the "App & Marketplace" in Rancher and search for the "Monitoring" chart. Configure the settings down here:
+
+![Rancher Monitoring Settings](images/rancher-monitoring-settings.png)
+
+**Hints:**
+- Ensure to open `9796/TCP` on the node since the RKE2 deployed node-exporter provides the Rancher Monitoring metrics via this port.
+- You can delete the `rancher-monitoring-kube-proxy` ServiceMonitor since object since we run the RKE K8s without `kube-proxy` (Cilium configuration `kubeProxyReplacement: "strict"`). Ensure all other Prometheus targets are healthy.
+- If the Grafana pod does not come up properly, ensure your NFS share squash settings allow the Grafana init container to change the ownership of files/directories inside its NFS based PV.
+
+Sources:
+- https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/
 
 ## Logging with Loki
 TODO

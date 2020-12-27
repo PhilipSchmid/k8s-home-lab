@@ -4,20 +4,21 @@ This repository should contain all required steps, manifests and resources to se
 # Technologies
 Currently there's only a rough plan about which technologies should be used for this setup. The table down here will definitely change as soon as the project progresses.
 
-| What | Technology |
-|---|---|
-| DNS Provider | DigitalOcean |
-| OS (Intel NUC) | Red Hat 8 |
-| Distributon | Rancher (RKE2) |
-| CRI | containerd (included in RKE2) |
-| CNI | Cilium |
-| CSI | NFS-Client Provisioner |
+| What                 | Technology                                      |
+| -------------------- | ----------------------------------------------- |
+| DNS Provider         | DigitalOcean                                    |
+| OS (Intel NUC)       | Red Hat 8                                       |
+| Distributon          | Rancher (RKE2)                                  |
+| CRI                  | containerd (included in RKE2)                   |
+| CNI                  | Cilium                                          |
+| CSI                  | NFS-Client Provisioner                          |
 | Certificate Handling | Cert-Manager with Let's Encrypt (DNS Challenge) |
-| Ingress Controller | Nginx |
-| Data Backup | Kanister |
-| App Deployment | Helm & mostly ArgoCD |
-| Logging | Grafana Loki (via Rancher Logging) |
-| Registry | Harbor |
+| Ingress Controller   | Nginx                                           |
+| Control Plane        | Rancher 2.5                                     |
+| Data Backup          | Kanister                                        |
+| App Deployment       | Helm & mostly ArgoCD                            |
+| Logging              | Grafana Loki (via Rancher Logging)              |
+| Registry             | Harbor                                          |
 
 # Table of Content
 - [K8s Home Lab](#k8s-home-lab)
@@ -55,11 +56,12 @@ Currently there's only a rough plan about which technologies should be used for 
   - [External-DNS](#external-dns)
     - [External-DNS Prerequisites](#external-dns-prerequisites)
     - [External-DNS Installation](#external-dns-installation)
-  - [Prometheus Monitoring](#prometheus-monitoring)
+  - [Rancher (2.5.X)](#rancher-25x)
+    - [Rancher Prerequisites](#rancher-prerequisites)
+    - [Rancher Installation](#rancher-installation)
   - [Logging with Loki](#logging-with-loki)
   - [Kanister Backup & Restore](#kanister-backup--restore)
   - [GitOps using ArgoCD](#gitops-using-argocd)
-  - [Deploy Kubernetes Dashboard](#deploy-kubernetes-dashboard)
 - [Application Components](#application-components)
   - [Harbor Registry](#harbor-registry)
 - [Optional Components](#optional-components)
@@ -529,6 +531,10 @@ Sources:
 ## External-DNS
 Used to automatically create new DNS A records for new Ingress objects (on DigitalOcean).
 
+Sources:
+- https://github.com/kubernetes-sigs/external-dns
+- https://github.com/bitnami/charts/tree/master/bitnami/external-dns
+
 ### External-DNS Prerequisites
 Prepare & add the Helm chart repo:
 
@@ -561,13 +567,77 @@ Verification:
 kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
 ```
 
+## Rancher (2.5.X)
+
 Sources:
-- https://github.com/kubernetes-sigs/external-dns
-- https://github.com/bitnami/charts/tree/master/bitnami/external-dns
+- https://rancher.com/docs/rancher/v2.x/en/installation/install-rancher-on-k8s/
 
+### Rancher Prerequisites
+Prepare & add the Helm chart repo:
 
-## Prometheus Monitoring
-TODO
+```bash
+mkdir ~/rke2/rancher
+helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
+helm repo update
+```
+
+### Rancher Installation
+Create a `certificate.yaml` file to issue a Certificate manually:
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-rancher-ingress
+  namespace: cattle-system
+spec:
+  secretName: tls-rancher-ingress
+  commonName: rancher.example.com
+  dnsNames:
+  - rancher.example.com
+  issuerRef:
+    name: lets-encrypt-dns01-production-do
+    kind: ClusterIssuer
+```
+
+Apply and verify the Certificate:
+```bash
+$ kubectl apply -f certificate.yaml 
+certificate.cert-manager.io/tls-rancher-ingress created
+# Wait a few seconds up to a few minutes
+$ kubectl get certificate -n cattle-system
+NAME                  READY   SECRET                AGE
+tls-rancher-ingress   True    tls-rancher-ingress   2m18s
+```
+
+Create a `values.yaml` file with the following configuration:
+```yaml
+hostname: rancher.example.com
+ingress:
+  tls:
+    source: secret
+replicas: 1
+auditLog:
+  level: 1
+```
+
+Finally install the Rancher helm chart:
+```
+helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
+  --version 2.5.3 \
+  --namespace cattle-system \
+  -f values.yaml
+```
+
+Verification:
+```
+$ kubectl -n cattle-system rollout status deploy/rancher
+Waiting for deployment "rancher" rollout to finish: 0 of 1 updated replicas are available...
+deployment "rancher" successfully rolled out
+```
+
+Sources:
+- https://rancher.com/docs/rancher/v2.x/en/installation/resources/chart-options/
+- https://github.com/rancher/rancher/issues/26850#issuecomment-658644922
 
 ## Logging with Loki
 TODO
@@ -576,9 +646,6 @@ TODO
 TODO
 
 ## GitOps using ArgoCD
-TODO
-
-## Deploy Kubernetes Dashboard
 TODO
 
 

@@ -61,6 +61,8 @@ Currently there's only a rough plan about which technologies should be used for 
     - [Rancher Installation](#rancher-installation)
     - [Rancher Backup & Restore](#rancher-backup--restore)
     - [Rancher Monitoring](#rancher-monitoring)
+      - [Cilium Monitoring](#cilium-monitoring)
+      - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
   - [Logging with Loki](#logging-with-loki)
   - [Kanister Backup & Restore](#kanister-backup--restore)
   - [GitOps using ArgoCD](#gitops-using-argocd)
@@ -178,6 +180,9 @@ sudo firewall-cmd --add-port=2380/tcp --permanent
 sudo firewall-cmd --add-port=30000-32767/tcp --permanent
 # Used for the Rancher Monitoring
 sudo firewall-cmd --add-port=9796/tcp --permanent
+sudo firewall-cmd --add-port=19090/tcp --permanent
+sudo firewall-cmd --add-port=6942/tcp --permanent
+sudo firewall-cmd --add-port=9091/tcp --permanent
 ### CNI specific ports
 # 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows
 sudo firewall-cmd --add-port=4244/tcp --permanent
@@ -281,12 +286,18 @@ Create a `values.yaml` file with the following configuration:
 # See https://cilium.io/blog/2020/12/11/kube-proxy-free-cve-mitigation for more information.
 kubeProxyReplacement: "strict"
 
+tunnel: "geneve"
+
 hubble:
   enabled: true
 
   listenAddress: ":4244"
 
   metrics:
+    # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
+    # Currently fails in Cilium 1.9.1 (https://github.com/cilium/cilium/pull/14473)
+    #serviceMonitor:
+    #  enabled: true
     enabled:
     - dns:query;ignoreAAAA
     - drop
@@ -297,6 +308,7 @@ hubble:
 
   ui:
     enabled: true
+    replicas: 1
     ingress:
       enabled: true
       hosts:
@@ -317,6 +329,12 @@ ipv6:
 # Since we only have 1 node, we only need 1 replica:
 operator:
   replicas: 1
+  # Configure this prometheus section AFTER Rancher Monitoring is enabled!
+  #prometheus:
+  #  enabled: true
+  #  port: 6942
+  #  serviceMonitor:
+  #    enabled: true
 
 ipam:
   mode: "cluster-pool"
@@ -330,6 +348,9 @@ prometheus:
   enabled: true
   # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
   port: 19090
+  # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
+  #serviceMonitor:
+  #  enabled: true
 ```
 **Note:** Check the official [cilium/values.yaml](https://github.com/cilium/cilium/blob/master/install/kubernetes/cilium/values.yaml) in order to see all available values.
 
@@ -674,6 +695,83 @@ Navigate to the "App & Marketplace" in Rancher and search for the "Monitoring" c
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/
+
+#### Cilium Monitoring
+Since we now have deployed the Prometheus stack, we should be able to enable the Cilium monitoring which is also based on `ServiceMonitor` CRDs from the Prometheus stack. Add the following properties to the Cilium `values.yaml` file and redeploy it (keep all other values as shown before):
+
+```yaml
+hubble:
+  metrics:
+    serviceMonitor:
+      enabled: true
+
+operator:
+  prometheus:
+    enabled: true
+    port: 6942
+    serviceMonitor:
+      enabled: true
+
+prometheus:
+  serviceMonitor:
+    enabled: true
+```
+
+**Hint:** Ensure to open `19090/TCP`, `9091/TCP` and `6942/TCP` on the node since cilium exposes the Prometheus metrics on this port.
+
+#### Cilium Grafana Dashboards
+There are currently 3 publicy available Grafana Dashboards from Cilium:
+
+- [Cilium v1.9 Agent Metrics](https://grafana.com/grafana/dashboards/13537)
+- [Cilium v1.9 Hubble Metrics](https://grafana.com/grafana/dashboards/13539)
+- [Cilium v1.9 Operator Metrics](https://grafana.com/grafana/dashboards/13538)
+
+Create a ConfigMap (`grafana-cilium-dashboards-cm.yaml`) with the following content and replace the `...` placeholders with the regarding dashboard JSONs from the links above:
+```yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    grafana_dashboard: "1"
+  name: grafana-cilium-agent-metrics-cm
+  namespace: cattle-dashboards
+data:
+  cilium-agent-metrics.json: |-
+    ...
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    grafana_dashboard: "1"
+  name: grafana-cilium-hubble-metrics-cm
+  namespace: cattle-dashboards
+data:
+  cilium-hubble-metrics.json: |-
+    ...
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    grafana_dashboard: "1"
+  name: grafana-cilium-operator-metrics-cm
+  namespace: cattle-dashboards
+data:
+  cilium-operator-metrics.json: |-
+    ...
+```
+
+**Note**: The Grafana dashboards did not work right away. I needed to remove all `k8s_app=\"cilium\"`/`{io_cilium_app=\"operator\"}` constraints and I also needed to add `DS_PROMETHEUS` `templating` `list` objects. If you run into the same issues, just use the provided `manifests/grafana-cilium-dashboards-cm.yaml` manifest.
+
+Finally apply the ConfigMap:
+```bash
+kubectl apply -f grafana-cilium-dashboards-cm.yaml
+```
+
+Sources:
+- https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/migrating/#migrating-grafana-dashboards
 
 ## Logging with Loki
 TODO

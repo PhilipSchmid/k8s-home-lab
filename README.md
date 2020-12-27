@@ -59,6 +59,7 @@ Currently there's only a rough plan about which technologies should be used for 
   - [Rancher (2.5.X)](#rancher-25x)
     - [Rancher Prerequisites](#rancher-prerequisites)
     - [Rancher Installation](#rancher-installation)
+    - [Rancher Backup & Restore](#rancher-backup--restore)
   - [Logging with Loki](#logging-with-loki)
   - [Kanister Backup & Restore](#kanister-backup--restore)
   - [GitOps using ArgoCD](#gitops-using-argocd)
@@ -161,6 +162,7 @@ etcd-snapshot-retention: 56
 disable:
   - rke2-canal
   - rke2-ingress-nginx
+  - rke2-kube-proxy
 ```
 
 ### Firewall
@@ -272,6 +274,10 @@ Sources:
 ### Cilium Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
+# Set kubeProxyReplacement to "strict" in order to prevent CVE-2020-8554 and fully remove kube-proxy.
+# See https://cilium.io/blog/2020/12/11/kube-proxy-free-cve-mitigation for more information.
+kubeProxyReplacement: "strict"
+
 hubble:
   enabled: true
 
@@ -335,6 +341,7 @@ helm upgrade -i --create-namespace --atomic cilium cilium/cilium \
 Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
+- https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/
 
 ## Persistent Storage using NFS-Client Provisioner
 Used to provide persistent storage via NFS from the Synology NAS. It creates sub directories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).
@@ -640,6 +647,13 @@ deployment "rancher" successfully rolled out
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/installation/resources/chart-options/
 - https://github.com/rancher/rancher/issues/26850#issuecomment-658644922
+
+### Rancher Backup & Restore
+Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which is able to backup/restore all K8s and CRD resources that Rancher creates and manages.
+Backup target can be a Persistent Volume or a S3 bucket.
+
+Sources:
+- https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/
 
 ## Logging with Loki
 TODO

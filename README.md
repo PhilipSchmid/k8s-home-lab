@@ -635,6 +635,8 @@ Waiting for deployment "rancher" rollout to finish: 0 of 1 updated replicas are 
 deployment "rancher" successfully rolled out
 ```
 
+![Rancher Dashboard with official Let's Encrypt Certificate](images/rancher-dashboard-with-cert.png)
+
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/installation/resources/chart-options/
 - https://github.com/rancher/rancher/issues/26850#issuecomment-658644922

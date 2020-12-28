@@ -3,6 +3,8 @@ This repository should contain all required steps, manifests and resources to se
 
 In the end, I will probably run some applications on top of this technology stack but the main goal is to improve my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready** since the chaining of the different tools and their configurations has not been tested really well.
 
+![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
+
 # Technologies
 The technologies down here will probably change in the future. Nevertheless, the following table should provide you a small overview over currently used technologies in this setup.
 
@@ -29,7 +31,6 @@ The technologies down here will probably change in the future. Nevertheless, the
 - [Technologies](#technologies)
 - [Table of Content](#table-of-content)
 - [Hardware](#hardware)
-- [Topology](#topology)
 - [Prerequisites](#prerequisites)
   - [Host OS](#host-os)
     - [Disable Swap](#disable-swap)
@@ -82,9 +83,6 @@ The technologies down here will probably change in the future. Nevertheless, the
 One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS service from DigitalOcean.
 
 In my case I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core(TM) i7-10710U CPU @ 1.10GHz`) and 64 GB memory (`2 x 32 GB DDR4-2666`).
-
-# Topology
-![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
 
 # Prerequisites
 

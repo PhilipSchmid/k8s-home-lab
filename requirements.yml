@@ -1,8 +1,0 @@
----
-roles:
-  - name: puzzle.rancher
-    src: https://github.com/puzzle/ansible-rancher.git
-    scm: git
-    version: master
-
-collections: []

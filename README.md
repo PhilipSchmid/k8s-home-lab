@@ -4,21 +4,23 @@ This repository should contain all required steps, manifests and resources to se
 # Technologies
 Currently there's only a rough plan about which technologies should be used for this setup. The table down here will definitely change as soon as the project progresses.
 
-| What                 | Technology                                      |
-| -------------------- | ----------------------------------------------- |
-| DNS Provider         | DigitalOcean                                    |
-| OS (Intel NUC)       | Red Hat 8                                       |
-| Distributon          | Rancher (RKE2)                                  |
-| CRI                  | containerd (included in RKE2)                   |
-| CNI                  | Cilium                                          |
-| CSI                  | NFS-Client Provisioner                          |
-| Certificate Handling | Cert-Manager with Let's Encrypt (DNS Challenge) |
-| Ingress Controller   | Nginx                                           |
-| Control Plane        | Rancher 2.5                                     |
-| Data Backup          | Kanister                                        |
-| App Deployment       | Helm & mostly ArgoCD                            |
-| Logging              | Grafana Loki (via Rancher Logging)              |
-| Registry             | Harbor                                          |
+| What                   | Technology                                      |
+| ---------------------- | ----------------------------------------------- |
+| DNS Provider           | DigitalOcean (automated with External-DNS)      |
+| OS (Intel NUC)         | Red Hat 8                                       |
+| Distributon            | Rancher (RKE2)                                  |
+| CRI                    | containerd (included in RKE2)                   |
+| CNI                    | Cilium                                          |
+| CSI                    | NFS-Client Provisioner                          |
+| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) |
+| Ingress Controller     | Nginx                                           |
+| Control Plane          | Rancher 2.5                                     |
+| Control Plane Backup   | Rancher Backup                                  |
+| Monitoring             | Prometheus Stack via Rancher Monitoring         |
+| Persistent Data Backup | Kanister                                        |
+| App Deployment         | Helm & ArgoCD                                   |
+| Logging                | Grafana Loki (via Rancher Logging)              |
+| Registry               | Harbor                                          |
 
 # Table of Content
 - [K8s Home Lab](#k8s-home-lab)
@@ -59,7 +61,8 @@ Currently there's only a rough plan about which technologies should be used for 
   - [Rancher (2.5.X)](#rancher-25x)
     - [Rancher Prerequisites](#rancher-prerequisites)
     - [Rancher Installation](#rancher-installation)
-    - [Rancher Backup & Restore](#rancher-backup--restore)
+    - [Rancher Backups](#rancher-backups)
+      - [Rancher Backups Installation](#rancher-backups-installation)
     - [Rancher Monitoring](#rancher-monitoring)
       - [Cilium Monitoring](#cilium-monitoring)
       - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
@@ -209,13 +212,13 @@ public (active)
   interfaces: eno1
   sources: 
   services: cockpit dhcpv6-client ssh wireguard
-  ports: 9345/tcp 6443/tcp 10250/tcp 2379/tcp 2380/tcp 30000-32767/tcp 4240/tcp 6081/udp 80/tcp 443/tcp 4244/tcp
+  ports: 9345/tcp 6443/tcp 10250/tcp 2379/tcp 2380/tcp 30000-32767/tcp 4240/tcp 6081/udp 80/tcp 443/tcp 4244/tcp 9796/tcp 19090/tcp 6942/tcp 9091/tcp
   protocols: 
   masquerade: yes
   forward-ports: 
   source-ports: 
   icmp-blocks: 
-  rich rules:
+  rich rules: 
 ```
 
 Source:
@@ -672,14 +675,61 @@ Sources:
 - https://rancher.com/docs/rancher/v2.x/en/installation/resources/chart-options/
 - https://github.com/rancher/rancher/issues/26850#issuecomment-658644922
 
-### Rancher Backup & Restore
+### Rancher Backups
 Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which is able to backup/restore all K8s and CRD resources that Rancher creates and manages.
 Backup target can be a Persistent Volume or a S3 bucket.
 
-TODO
-
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/
+
+#### Rancher Backups Installation
+Navigate to the "App & Marketplace" in Rancher and search for the "Rancher Backups" chart. Configure the settings down here:
+
+![Rancher Backups Settings](images/rancher-backups-settings.png)
+
+Next, change the Rancher Backups PersistentVolume reclaim policy to `Retain` (since the `nfs-client` Storageclass uses `Delete` by default):
+
+```bash
+kubectl patch pv <rancher-backup-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+# E.g.:
+kubectl patch pv pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+```
+
+Verification:
+```bash
+# Before
+$ k get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
+pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679   10Gi       RWO            Delete           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs-client              75s
+# Change Retention Policy
+$ kubectl patch pv pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+persistentvolume/pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679 patched
+# After
+$ k get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
+pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679   10Gi       RWO            Retain           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs-client              2m21s
+```
+
+Finally, navigate to the "Rancher Backups" menu and configure a new scheduled backup job or simply create a new CR which does basically the same:
+
+```yaml
+apiVersion: resources.cattle.io/v1
+kind: Backup
+metadata:
+  name: default-backup-all
+  annotations:
+    field.cattle.io/description: 'Backups everything every 2h (retention: 2 weeks)'
+spec:
+  encryptionConfigSecretName: 
+  resourceSetName: rancher-resource-set
+  retentionCount: 168
+  schedule: 0 */2 * * *
+```
+
+More backup YAML examples can be found here: https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/examples/
+
+Verification:
+![Rancher Backup Job](images/rancher-backup-job.png)
 
 ### Rancher Monitoring
 Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use it this way.

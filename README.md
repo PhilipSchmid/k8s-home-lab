@@ -133,14 +133,14 @@ curl -sfL https://get.rke2.io | sudo sh -
 Verification:
 ```bash
 # Helm
-[user@commander tmp]$ helm version
+$ helm version
 version.BuildInfo{Version:"v3.4.2", GitCommit:"23dd3af5e19a02d4f4baa5b2f242645a1a3af629", GitTreeState:"clean", GoVersion:"go1.14.13"}
 # Kubectl
-[user@commander tmp]$ kubectl version client
+$ kubectl version client
 Client Version: version.Info{Major:"1", Minor:"20", GitVersion:"v1.20.1", GitCommit:"c4d752765b3bbac2237bf87cf0b1c2e307844666", GitTreeState:"clean", BuildDate:"2020-12-18T12:09:25Z", GoVersion:"go1.15.5", Compiler:"gc", Platform:"linux/amd64"}
 The connection to the server localhost:8080 was refused - did you specify the right host or port?
 # RKE2
-[user@commander tmp]$ rke2 --version
+$ rke2 --version
 rke2 version v1.18.13+rke2r1 (328b72961434301ade71381ce94b23b178c40736)
 go version go1.13.15b4
 ```
@@ -173,7 +173,7 @@ disable:
   - rke2-kube-proxy
 ```
 
-**Note:** I disabled `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy-less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards!
+**Note:** I disabled `rke2-canal` and `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable `rke2-kube-proxy` if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste(Daemonset in host network namespace).
 
 ### Firewall
 Ensure to open the required ports:
@@ -236,7 +236,7 @@ Add the following line to `/etc/dnf/dnf.conf` and/or `/etc/yum.conf`:
 exclude=rke2-*
 ```
 
-This will cause the following packages to be kept at this exact version as long as the `exclude` configuration is in place:
+This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```bash
 $ sudo rpm -qa "*rke2*"
 rke2-common-1.18.13~rke2r1-0.el8.x86_64
@@ -256,8 +256,8 @@ sudo systemctl enable rke2-server --now
 
 Verification:
 ```bash
-[user@commander tmp]$ sudo systemctl status rke2-server
-[user@commander tmp]$ sudo journalctl -u rke2-server -f
+$ sudo systemctl status rke2-server
+$ sudo journalctl -u rke2-server -f
 ```
 
 ## Configure Kubectl (on RKE2 Host)
@@ -269,9 +269,9 @@ chmod 600 ~/.kube/config
 
 Verification:
 ```bash
-[user@commander tmp]$ kubectl get nodes
+$ kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
-commander.example.com   Ready    etcd,master   5m13s   v1.18.13+rke2r1
+node1.example.com   Ready    etcd,master   5m13s   v1.18.13+rke2r1
 ```
 
 # Basic Infrastructure Components
@@ -288,8 +288,8 @@ mount | grep /sys/fs/bpf
 
 If that's not the case, mount it using the commands down here:
 ```bash
-sudo mount bpffs -t bpf /sys/fs/bpf
-sudo bash -c 'cat <<EOF >> /etc/fstab
+$ sudo mount bpffs -t bpf /sys/fs/bpf
+$ sudo bash -c 'cat <<EOF >> /etc/fstab
 none /sys/fs/bpf bpf rw,relatime 0 0
 EOF'
 ```
@@ -512,7 +512,7 @@ helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
 
 Verification:
 ```bash
-[user@commander rke2]$ kubectl get pods --namespace cert-manager
+$ kubectl get pods --namespace cert-manager
 NAME                                       READY   STATUS    RESTARTS   AGE
 cert-manager-5fd9d77768-nm72s              1/1     Running   0          14s
 cert-manager-cainjector-78cbd59555-tk666   1/1     Running   0          14s

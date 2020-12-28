@@ -38,7 +38,7 @@ Currently there's only a rough plan about which technologies should be used for 
   - [RKE2 Setup](#rke2-setup)
     - [Basic Configuration](#basic-configuration)
     - [Firewall](#firewall)
-    - [Hold/Mark RKE Package Update](#holdmark-rke-package-update)
+    - [Prevent RKE2 Package Updates](#prevent-rke2-package-updates)
   - [Starting RKE2](#starting-rke2)
   - [Configure Kubectl (on RKE2 Host)](#configure-kubectl-on-rke2-host)
 - [Basic Infrastructure Components](#basic-infrastructure-components)
@@ -226,7 +226,7 @@ public (active)
 Source:
 - https://docs.rke2.io/install/requirements/#networking
 
-### Hold/Mark RKE Package Update
+### Prevent RKE2 Package Updates
 In order to provide more stability, I chose to DNF/YUM "mark/hold" the RKE2 related packages so a `dnf update`/`yum update` does not mess around with them.
 
 Add the following line to `/etc/dnf/dnf.conf` and/or `/etc/yum.conf`:

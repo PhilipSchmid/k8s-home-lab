@@ -68,11 +68,12 @@ Currently there's only a rough plan about which technologies should be used for 
       - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
   - [Logging with Loki](#logging-with-loki)
   - [Kanister Backup & Restore](#kanister-backup--restore)
-  - [GitOps using ArgoCD](#gitops-using-argocd)
+  - [GitOps using Fleet](#gitops-using-fleet)
+    - [Fleet Installation](#fleet-installation)
+    - [Fleet Configuration](#fleet-configuration)
 - [Application Components](#application-components)
+  - [Minio Object Storage](#minio-object-storage)
   - [Harbor Registry](#harbor-registry)
-- [Optional Components](#optional-components)
-  - [Secret replication using Emberstack Reflector](#secret-replication-using-emberstack-reflector)
 
 # Hardware
 One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS/S3/storage service from DigitalOcean.
@@ -831,22 +832,140 @@ TODO
 ## Kanister Backup & Restore
 TODO
 
-## GitOps using ArgoCD
-TODO
+## GitOps using Fleet
+I first wanted to use ArgoCD to deploy applications with the GitOps approach on the K8s cluster but then I realized, Rancher 2.5+ already comes with Fleet preinstalled and that it also offers a quite nice UI integration. I therefore chose to give Fleet a try.
 
+Sources:
+- https://rancher.com/docs/rancher/v2.x/en/deploy-across-clusters/fleet
+- https://fleet.rancher.io/
+- https://github.com/rancher/fleet-examples/
+
+### Fleet Installation
+No Fleet installation is required since Rancher 2.5+ already installed this app inside the `fleet-system` namespace.
+
+Verification:
+```bash
+$ kubectl -n fleet-system logs -l app=fleet-controller
+<output truncated>
+time="2020-12-28T12:45:34Z" level=info msg="Cluster registration fleet-local/request-w8hv7, cluster fleet-local/local granted [true]"
+$ kubectl -n fleet-system get pods -l app=fleet-controller
+NAME                                READY   STATUS    RESTARTS   AGE
+fleet-controller-767b564d9f-fshp6   1/1     Running   0          2m35s
+```
+
+### Fleet Configuration
+In order to manage the RKE2 `local` cluster, you need to switch to the `fleet-local` namespace as the `local` cluster should already be added there since Rancher 2.5+ automatically deployed a fleet-agent in it:
+
+```bash
+$ k get clusters.fleet.cattle.io -A
+NAMESPACE     NAME    BUNDLES-READY   NODES-READY   SAMPLE-NODE             LAST-SEEN              STATUS
+fleet-local   local   1/1             1/1           node1.example.com   2020-12-28T12:45:52Z
+```
+
+![Fleet local Cluster](images/fleet-local-cluster.png)
+
+The final fleet basic configuration step is to add a Git repository which is later used to store the Fleet managed manifests. I chose to also host this on Github inside the private https://github.com/PhilipSchmid/home-lab-fleet-manifests repository.
+
+To allow Fleet to access a private Git repository, you must create a SSH key which is then added as deployment key. More information about this process can be found here: https://fleet.rancher.io/gitrepo-add/
+
+```bash
+mkdir ~/rke2/fleet
+cd ~/rke2/fleet
+
+ssh-keygen -t rsa -b 4096 -m pem -C "Fleet" -f fleet_id_rsa
+ssh-keyscan -H github.com 2>/dev/null > github_knownhost
+
+kubectl create secret generic fleet-github-ssh-key \
+  -n fleet-local \
+  --from-file=ssh-privatekey=fleet_id_rsa \
+  --from-file=known_hosts=github_knownhost \
+  --type=kubernetes.io/ssh-auth 
+```
+
+Do not forget to add the just generated public key as deploy key on the Github Git repository (read permissions should be sufficient)
+
+Finally it's time to configure the GitRepo CR (`home-lab-fleet-manifests.yaml`):
+```yaml
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: home-lab-fleet-manifests
+  namespace: fleet-local
+spec:
+  repo: git@github.com:PhilipSchmid/home-lab-fleet-manifests.git
+  clientSecretName: fleet-github-ssh-key
+  paths:
+  - /minio
+  - /harbor
+```
+
+```bash
+kubectl apply -f home-lab-fleet-manifests.yaml
+```
+
+Sources:
+- https://fleet.rancher.io/gitrepo-add/
 
 # Application Components
+Deployed via GitOps (Fleet).
+
+Sources:
+- https://fleet.rancher.io/gitrepo-structure/
+
+## Minio Object Storage
+Create a `minio/fleet.yaml` file inside the `home-lab-fleet-manifests` Git repository:
+
+```yaml
+defaultNamespace: fleet-app-minio
+helm:
+  chart: minio
+  repo: https://helm.min.io/
+  releaseName: minio
+  version: 8.0.8
+  values:
+    ingress: 
+      enabled: "true"
+      hosts:
+      - minio.example.com
+      tls:
+      - hosts:
+        - minio.example.com
+      annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: 5G
+        cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
+    persistence: 
+      size: "100Gi"
+      storageClass: "nfs-client"
+      accessMode: ReadWriteMany
+    metrics:
+      serviceMonitor:
+        enabled: true
+diff:
+  comparePatches:
+  - apiVersion: networking.k8s.io/v1beta1
+    kind: Ingress
+    name: minio
+    namespace: fleet-app-minio
+    operations:
+    - {"op":"remove", "path":"/spec/rules/0/http/paths"}
+```
+
+**Note:** The `diff.comparePatches` section is required since Fleet would otherwise recognize the Minio Helm chart created Ingress object as `modified` all the time. Error: `Modified(1) [Cluster fleet-local/local]; ingress.networking.k8s.io fleet-app-minio/minio modified {"spec":{"rules":[{"host":"minio.example.com","http":{"paths":[{"backend":{"serviceName":"minio","servicePort":9000},"path":"/"}]}}]}}`
+
+Finally push this `fleet.yaml` file to the repositorys `master` branch. Fleet should then automatically start to deploy the Minio application via the specified Helm chart.
+
+![Fleet Minio Deployment](images/rancher-fleet-minio-git-repo-active.png)
+
+To get the Minio secret and accesskey, issue the following commands:
+```bash
+k get secret -n fleet-app-minio minio -o jsonpath='{.data.accesskey}' | base64 -d
+k get secret -n fleet-app-minio minio -o jsonpath='{.data.secretkey}' | base64 -d
+```
+
+Sources:
+- https://github.com/minio/charts
+- https://github.com/minio/charts#existing-secret
+- https://github.com/rancher/fleet-examples/blob/c6e54d7a56565e52a63de8a2088997b46253c1fb/single-cluster/helm-multi-chart/rancher-monitoring/fleet.yaml#L6
 
 ## Harbor Registry
 TODO
-
-
-# Optional Components
-
-## Secret replication using Emberstack Reflector
-Used to reflect secrets to other namespaces.
-
-**Not used at the moment!**
-
-Sources:
-- https://github.com/emberstack/kubernetes-reflector

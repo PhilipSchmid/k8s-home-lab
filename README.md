@@ -1,4 +1,4 @@
-# K8s Home Lab
+# Kubernetes in a Home Lab Environment
 This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
 In the end, I will probably run some applications on top of this technology stack but the main goal is to improve my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready** since the chaining of the different tools and their configurations has not been tested really well.
@@ -6,7 +6,7 @@ In the end, I will probably run some applications on top of this technology stac
 ![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
 
 # Technologies
-The technologies down here will probably change in the future. Nevertheless, the following table should provide you a small overview over currently used technologies in this setup.
+The technologies down here will probably change in the future. Nevertheless, the following table should provide you a small overview over currently used technologies.
 
 | What                   | Technology                                      | Status |
 | ---------------------- | ----------------------------------------------- | ------ |
@@ -27,7 +27,7 @@ The technologies down here will probably change in the future. Nevertheless, the
 | Container Registry     | Harbor                                          |        |
 
 # Table of Content
-- [K8s Home Lab](#k8s-home-lab)
+- [Kubernetes in a Home Lab Environment](#kubernetes-in-a-home-lab-environment)
 - [Technologies](#technologies)
 - [Table of Content](#table-of-content)
 - [Hardware](#hardware)
@@ -172,6 +172,8 @@ disable:
   - rke2-ingress-nginx
   - rke2-kube-proxy
 ```
+
+**Note:** I disabled `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy-less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards!
 
 ### Firewall
 Ensure to open the required ports:

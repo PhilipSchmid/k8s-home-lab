@@ -173,7 +173,7 @@ disable:
   - rke2-kube-proxy
 ```
 
-**Note:** I disabled `rke2-canal` and `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable `rke2-kube-proxy` if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste(Daemonset in host network namespace).
+**Note:** I disabled `rke2-canal` and `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable `rke2-kube-proxy` if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my own taste (Daemonset in host network namespace).
 
 ### Firewall
 Ensure to open the required ports:

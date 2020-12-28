@@ -4,7 +4,7 @@ This repository should contain all required steps, manifests and resources to se
 In the end, I will probably run some applications on top of this technology stack but the main goal is to improve my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready** since the chaining of the different tools and their configurations has not been tested really well.
 
 # Technologies
-Currently there's only a rough plan about which technologies should be used for this setup. The table down here will definitely change as soon as the project progresses.
+The technologies down here will probably change in the future. Nevertheless, the following table should provide you a small overview over currently used technologies in this setup.
 
 | What                   | Technology                                      | Status |
 | ---------------------- | ----------------------------------------------- | ------ |
@@ -79,7 +79,7 @@ Currently there's only a rough plan about which technologies should be used for 
   - [Harbor Registry](#harbor-registry)
 
 # Hardware
-One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS/S3/storage service from DigitalOcean.
+One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS service from DigitalOcean.
 
 In my case I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core(TM) i7-10710U CPU @ 1.10GHz`) and 64 GB memory (`2 x 32 GB DDR4-2666`).
 

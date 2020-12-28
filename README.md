@@ -4,23 +4,23 @@ This repository should contain all required steps, manifests and resources to se
 # Technologies
 Currently there's only a rough plan about which technologies should be used for this setup. The table down here will definitely change as soon as the project progresses.
 
-| What                   | Technology                                      |
-| ---------------------- | ----------------------------------------------- |
-| DNS Provider           | DigitalOcean (automated with External-DNS)      |
-| OS (Intel NUC)         | Red Hat 8                                       |
-| Distributon            | Rancher (RKE2)                                  |
-| CRI                    | containerd (included in RKE2)                   |
-| CNI                    | Cilium                                          |
-| CSI                    | NFS-Client Provisioner                          |
-| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) |
-| Ingress Controller     | Nginx                                           |
-| Control Plane          | Rancher 2.5                                     |
-| Control Plane Backup   | Rancher Backup                                  |
-| Monitoring             | Prometheus Stack via Rancher Monitoring         |
-| Persistent Data Backup | Kanister                                        |
-| App Deployment         | Helm & Fleet                                    |
-| Logging                | Grafana Loki (via Rancher Logging)              |
-| Registry               | Harbor                                          |
+| What                   | Technology                                      | Status |
+| ---------------------- | ----------------------------------------------- | ------ |
+| DNS Provider           | DigitalOcean (automated with External-DNS)      | Done   |
+| OS (Intel NUC)         | Red Hat 8                                       | Done   |
+| Distributon            | Rancher (RKE2)                                  | Done   |
+| CRI                    | containerd (included in RKE2)                   | Done   |
+| CNI                    | Cilium                                          | Done   |
+| CSI                    | NFS-Client Provisioner                          | Done   |
+| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) | Done   |
+| Ingress Controller     | Nginx                                           | Done   |
+| Control Plane          | Rancher 2.5                                     | Done   |
+| Control Plane Backup   | Rancher Backup                                  | Done   |
+| Monitoring             | Prometheus Stack via Rancher Monitoring         | Done   |
+| Persistent Data Backup | Kanister                                        |        |
+| App Deployment         | Helm & Fleet                                    | Done   |
+| Logging                | Grafana Loki (via Rancher Logging)              |        |
+| Container Registry     | Harbor                                          |        |
 
 # Table of Content
 - [K8s Home Lab](#k8s-home-lab)
@@ -38,6 +38,7 @@ Currently there's only a rough plan about which technologies should be used for 
   - [RKE2 Setup](#rke2-setup)
     - [Basic Configuration](#basic-configuration)
     - [Firewall](#firewall)
+    - [Hold/Mark RKE Package Update](#holdmark-rke-package-update)
   - [Starting RKE2](#starting-rke2)
   - [Configure Kubectl (on RKE2 Host)](#configure-kubectl-on-rke2-host)
 - [Basic Infrastructure Components](#basic-infrastructure-components)
@@ -225,6 +226,25 @@ public (active)
 Source:
 - https://docs.rke2.io/install/requirements/#networking
 
+### Hold/Mark RKE Package Update
+In order to provide more stability, I chose to DNF/YUM "mark/hold" the RKE2 related packages so a `dnf update`/`yum update` does not mess around with them.
+
+Add the following line to `/etc/dnf/dnf.conf` and/or `/etc/yum.conf`:
+```bash
+exclude=rke2-*
+```
+
+This will cause the following packages to be kept at this exact version as long as the `exclude` configuration is in place:
+```bash
+$ sudo rpm -qa "*rke2*"
+rke2-common-1.18.13~rke2r1-0.el8.x86_64
+rke2-server-1.18.13~rke2r1-0.el8.x86_64
+rke2-selinux-0.4-1.el8.noarch
+```
+
+Sources:
+- https://www.systutorials.com/making-dnf-yum-not-update-certain-packages/
+- https://www.commandlinefu.com/commands/view/1451/search-through-all-installed-packages-names-on-rpm-systems
 
 ## Starting RKE2
 Enable the `rke2-server` service and start it:

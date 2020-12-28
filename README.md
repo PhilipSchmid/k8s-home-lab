@@ -18,7 +18,7 @@ Currently there's only a rough plan about which technologies should be used for 
 | Control Plane Backup   | Rancher Backup                                  |
 | Monitoring             | Prometheus Stack via Rancher Monitoring         |
 | Persistent Data Backup | Kanister                                        |
-| App Deployment         | Helm & ArgoCD                                   |
+| App Deployment         | Helm & Fleet                                    |
 | Logging                | Grafana Loki (via Rancher Logging)              |
 | Registry               | Harbor                                          |
 

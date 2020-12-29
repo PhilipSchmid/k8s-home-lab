@@ -312,6 +312,10 @@ Create a `values.yaml` file with the following configuration:
 # See https://cilium.io/blog/2020/12/11/kube-proxy-free-cve-mitigation for more information.
 kubeProxyReplacement: "strict"
 
+# The following two "k8sService.*" properties are required when Cilium is configured to fully replace kube-proxy since otherways it tries to reach the kube-apiserver on startup via the Service IP which does of course does not work without kube-proxy (iptables rules).
+k8sServiceHost: <node-ip-of-node-where-kube-apiserver-is-running>
+k8sServicePort: 6443
+
 tunnel: "geneve"
 
 hubble:

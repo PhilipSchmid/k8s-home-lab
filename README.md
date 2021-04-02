@@ -110,7 +110,7 @@ Install `kubectl`, `helm` and RKE2 to the host system:
 $ BINARY_DIR="/usr/local/bin"
 $ cd /tmp
 # Helm
-$ wget https://get.helm.sh/helm-v3.4.2-linux-amd64.tar.gz
+$ wget https://get.helm.sh/helm-v3.5.3-linux-amd64.tar.gz
 $ tar -zxvf helm-*-linux-amd64.tar.gz
 $ sudo mv linux-amd64/helm $BINARY_DIR/helm
 $ sudo chmod +x $BINARY_DIR/helm
@@ -134,15 +134,14 @@ Verification:
 ```bash
 # Helm
 $ helm version
-version.BuildInfo{Version:"v3.4.2", GitCommit:"23dd3af5e19a02d4f4baa5b2f242645a1a3af629", GitTreeState:"clean", GoVersion:"go1.14.13"}
+version.BuildInfo{Version:"v3.5.3", GitCommit:"041ce5a2c17a58be0fcd5f5e16fb3e7e95fea622", GitTreeState:"dirty", GoVersion:"go1.15.8"}
 # Kubectl
 $ kubectl version client
-Client Version: version.Info{Major:"1", Minor:"20", GitVersion:"v1.20.1", GitCommit:"c4d752765b3bbac2237bf87cf0b1c2e307844666", GitTreeState:"clean", BuildDate:"2020-12-18T12:09:25Z", GoVersion:"go1.15.5", Compiler:"gc", Platform:"linux/amd64"}
-The connection to the server localhost:8080 was refused - did you specify the right host or port?
+Client Version: version.Info{Major:"1", Minor:"20", GitVersion:"v1.20.5", GitCommit:"6b1d87acf3c8253c123756b9e61dac642678305f", GitTreeState:"clean", BuildDate:"2021-03-18T01:10:43Z", GoVersion:"go1.15.8", Compiler:"gc", Platform:"linux/amd64"}
 # RKE2
 $ rke2 --version
-rke2 version v1.18.13+rke2r1 (328b72961434301ade71381ce94b23b178c40736)
-go version go1.13.15b4
+rke2 version v1.19.8+rke2r1 (77ad545580efc4ab64ce231d4a75fa2e493956a3)
+go version go1.15.8b5
 ```
 
 Sources:
@@ -239,8 +238,8 @@ exclude=rke2-*
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```bash
 $ sudo rpm -qa "*rke2*"
-rke2-common-1.18.13~rke2r1-0.el8.x86_64
-rke2-server-1.18.13~rke2r1-0.el8.x86_64
+rke2-common-1.19.8~rke2r1-0.el8.x86_64
+rke2-server-1.19.8~rke2r1-0.el8.x86_64
 rke2-selinux-0.4-1.el8.noarch
 ```
 
@@ -271,7 +270,7 @@ Verification:
 ```bash
 $ kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
-node1.example.com   Ready    etcd,master   5m13s   v1.18.13+rke2r1
+node1.example.com   Ready    etcd,master   5m13s   v1.19.8+rke2r1
 ```
 
 # Basic Infrastructure Components
@@ -387,7 +386,7 @@ prometheus:
 Finally install the Cilium helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic cilium cilium/cilium \
-  --version 1.9.1 \
+  --version 1.9.5 \
   --namespace cilium \
   -f values.yaml
 ```
@@ -482,7 +481,7 @@ controller:
 Finally install the Nginx ingress controller helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
-  --version 3.16.1 \
+  --version 3.26.0 \
   --namespace ingress-nginx \
   -f values.yaml
 ```
@@ -497,7 +496,7 @@ Sources:
 ### Cert-Manager Prerequisites
 Install the required CRDs:
 ```
-$ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.crds.yaml
+$ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.2.0/cert-manager.crds.yaml
 ```
 
 Prepare & add the Helm chart repo:
@@ -511,7 +510,7 @@ Install the Cert-Manager controller helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
   --namespace cert-manager \
-  --version v1.1.0
+  --version v1.2.0
 ```
 
 Verification:
@@ -618,7 +617,7 @@ digitalocean:
 Finally install the External-DNS helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
-  --version 4.5.0 \
+  --version 4.9.4 \
   --namespace external-dns \
   -f values.yaml
 ```
@@ -662,6 +661,7 @@ spec:
 
 Apply and verify the Certificate:
 ```bash
+$ kubectl create ns cattle-system
 $ kubectl apply -f certificate.yaml 
 certificate.cert-manager.io/tls-rancher-ingress created
 # Wait a few seconds up to a few minutes
@@ -684,7 +684,7 @@ auditLog:
 Finally install the Rancher helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
-  --version 2.5.3 \
+  --version 2.5.7 \
   --namespace cattle-system \
   -f values.yaml
 ```

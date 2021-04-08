@@ -467,6 +467,9 @@ controller:
 
   metrics:
     enabled: true
+    # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
+    #serviceMonitor:
+    #  enabled: true
     
   podSecurityPolicy:
     enabled: true

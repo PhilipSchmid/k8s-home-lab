@@ -8,23 +8,25 @@ In the end, I will probably run some applications on top of this technology stac
 # Technologies
 The technologies down here will probably change in the future. Nevertheless, the following table should provide you a small overview over currently used technologies.
 
-| What                   | Technology                                      | Status |
-| ---------------------- | ----------------------------------------------- | ------ |
-| DNS Provider           | DigitalOcean (automated with External-DNS)      | Done   |
-| OS (Intel NUC)         | Red Hat 8                                       | Done   |
-| Distributon            | Rancher (RKE2)                                  | Done   |
-| CRI                    | containerd (included in RKE2)                   | Done   |
-| CNI                    | Cilium                                          | Done   |
-| CSI                    | NFS-Client Provisioner                          | Done   |
-| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) | Done   |
-| Ingress Controller     | Nginx                                           | Done   |
-| Control Plane          | Rancher 2.5                                     | Done   |
-| Control Plane Backup   | Rancher Backup                                  | Done   |
-| Monitoring             | Prometheus Stack via Rancher Monitoring         | Done   |
-| Persistent Data Backup | Kanister                                        |        |
-| App Deployment         | Helm & Fleet                                    | Done   |
-| Logging                | Grafana Loki (via Rancher Logging)              |        |
-| Container Registry     | Harbor                                          |        |
+| What                   | Technology                                      | Status    |
+| ---------------------- | ----------------------------------------------- | --------- |
+| DNS Provider           | DigitalOcean (automated with External-DNS)      | Done      |
+| OS (Intel NUC)         | Red Hat 8                                       | Done      |
+| Distributon            | Rancher (RKE2)                                  | Done      |
+| CRI                    | containerd (included in RKE2)                   | Done      |
+| CNI                    | Cilium                                          | Done      |
+| CSI                    | NFS-Client Provisioner                          | Done      |
+| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) | Done      |
+| Ingress Controller     | Nginx                                           | Done      |
+| Control Plane          | Rancher 2.5                                     | Done      |
+| Control Plane Backup   | Rancher Backup                                  | Done      |
+| Monitoring             | Prometheus Stack via Rancher Monitoring         | Done      |
+| Persistent Data Backup | Kanister                                        | On hold * |
+| App Deployment         | Helm & Fleet                                    | Done      |
+| Logging                | Grafana Loki (via Rancher Logging)              | On hold * |
+| Container Registry     | Harbor                                          | On hold * |
+
+`*` On hold since this feature is currently not needed.
 
 # Table of Content
 - [Kubernetes in a Home Lab Environment](#kubernetes-in-a-home-lab-environment)
@@ -68,8 +70,9 @@ The technologies down here will probably change in the future. Nevertheless, the
     - [Rancher Backups](#rancher-backups)
       - [Rancher Backups Installation](#rancher-backups-installation)
     - [Rancher Monitoring](#rancher-monitoring)
-      - [Cilium Monitoring](#cilium-monitoring)
+      - [Cilium & Nginx Ingress Monitoring](#cilium--nginx-ingress-monitoring)
       - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
+      - [Custom Nginx Ingress & Cluster Capacity Management Dashboard](#custom-nginx-ingress--cluster-capacity-management-dashboard)
   - [Logging with Loki](#logging-with-loki)
   - [Kanister Backup & Restore](#kanister-backup--restore)
   - [GitOps using Fleet](#gitops-using-fleet)
@@ -201,7 +204,7 @@ $ sudo firewall-cmd --add-port=6081/udp --permanent
 ### Ingress Controller specific ports
 $ sudo firewall-cmd --add-port=80/tcp --permanent
 $ sudo firewall-cmd --add-port=443/tcp --permanent
-
+$ sudo firewall-cmd --add-port=10254/tcp --permanent
 ### Finally apply all the firewall changes
 $ sudo firewall-cmd --reload
 ```
@@ -764,20 +767,29 @@ Verification:
 ### Rancher Monitoring
 Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use it this way.
 
-Navigate to the "App & Marketplace" in Rancher and search for the "Monitoring" chart. Configure the settings down here:
+Navigate to the "App & Marketplace" in Rancher and search for the "Monitoring" chart. Leave nearly all settings default but enable persistent storage for Prometheus:
 
 ![Rancher Monitoring Settings](images/rancher-monitoring-settings.png)
 
+Also click on `Edit as YAML` and search for the `rke2Proxy` section in order to disable it:
+```yaml
+rke2Proxy:
+  enabled: false
+```
+(We simply can't use the kube-proxy metrics target since we disabled it completely ("kube-proxy less" Cilium).)
+
+Finally click "Install" and wait a few minutes.
+
 **Hints:**
 - Ensure to open `9796/TCP` on the node since the RKE2 deployed node-exporter provides the Rancher Monitoring metrics via this port.
-- You can delete the `rancher-monitoring-kube-proxy` ServiceMonitor since object since we run the RKE K8s without `kube-proxy` (Cilium configuration `kubeProxyReplacement: "strict"`). Ensure all other Prometheus targets are healthy.
+- Ensure all Prometheus targets are healthy by navigating to "Monitoring" -> "Overview" -> "Prometheus Targets".
 - If the Grafana pod does not come up properly, ensure your NFS share squash settings allow the Grafana init container to change the ownership of files/directories inside its NFS based PV.
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/
 
-#### Cilium Monitoring
-Since we now have deployed the Prometheus stack, we should be able to enable the Cilium monitoring which is also based on `ServiceMonitor` CRDs from the Prometheus stack. Add the following properties to the Cilium `values.yaml` file and redeploy it (keep all other values as shown before):
+#### Cilium & Nginx Ingress Monitoring
+Since we now have deployed the Prometheus stack, we should be able to enable the Cilium & Nginx ingress monitoring which are also based on the `ServiceMonitor` CRDs from the Prometheus stack. Add the following properties to the Cilium `values.yaml` file and redeploy it (keep all other values as shown before):
 
 ```yaml
 hubble:
@@ -797,7 +809,15 @@ prometheus:
     enabled: true
 ```
 
-**Hint:** Ensure to open `19090/TCP`, `9091/TCP` and `6942/TCP` on the node since cilium exposes the Prometheus metrics on this port.
+**Hint:** Ensure to open `19090/TCP`, `9091/TCP` and `6942/TCP` on the node since cilium exposes the Prometheus metrics on these ports.
+
+Do the same with the Nginx ingress by changing the values down here:
+```yaml
+controller:
+  metrics:
+    serviceMonitor:
+      enabled: true
+```
 
 #### Cilium Grafana Dashboards
 There are currently 3 publicy available Grafana Dashboards from Cilium:
@@ -843,9 +863,8 @@ data:
     ...
 ```
 
-**Note**: The Grafana dashboards did not work right away. I needed to remove all `k8s_app=\"cilium\"`/`{io_cilium_app=\"operator\"}` constraints and I also needed to add `DS_PROMETHEUS` `templating` `list` objects. If you run into the same issues, just use the provided `manifests/grafana-cilium-dashboards-cm.yaml` manifest.
+**Note**: The Grafana dashboards did not work right away. I needed to remove all `k8s_app=\"cilium\"`/`{io_cilium_app=\"operator\"}` constraints and I also needed to add `DS_PROMETHEUS` `templating` `list` objects. If you run into the same issues, just use the provided `manifests/grafana-cilium-dashboards-cm.yaml` manifest:
 
-Finally apply the ConfigMap:
 ```bash
 $ kubectl apply -f grafana-cilium-dashboards-cm.yaml
 ```
@@ -854,6 +873,22 @@ $ kubectl apply -f grafana-cilium-dashboards-cm.yaml
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/migrating/#migrating-grafana-dashboards
+
+#### Custom Nginx Ingress & Cluster Capacity Management Dashboard
+When installing the Prometheus stack, I also often deploy some other nice Grafna Dashboards like this one for the Nginx ingress:
+
+![Nginx Ingress Gafana Dashboard](images/nginx-dashboard.png)
+
+.. or this one for the cluster capacity management:
+
+![Cluster Capacity Management Grafana Dashboard](images/capacity-dashboard.png)
+
+If you want these dashboards too, just use the provided manifests:
+
+```bash
+$ kubectl apply -f manifests/nginx-dashboard.yaml
+$ kubectl apply -f manifests/capacity-monitoring-dashboard.yaml
+```
 
 ## Logging with Loki
 TODO

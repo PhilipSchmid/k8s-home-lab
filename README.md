@@ -1,5 +1,5 @@
 # Kubernetes in a Home Lab Environment
-This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
+This  repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
 In the end, I will probably run some applications on top of this technology stack but the main goal is to improve my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready** since the chaining of the different tools and their configurations has not been tested really well.
 

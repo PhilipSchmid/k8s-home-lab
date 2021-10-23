@@ -113,14 +113,14 @@ Install `kubectl`, `helm` and RKE2 to the host system:
 $ BINARY_DIR="/usr/local/bin"
 $ cd /tmp
 # Helm
-$ wget https://get.helm.sh/helm-v3.5.3-linux-amd64.tar.gz
+$ wget https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz
 $ tar -zxvf helm-*-linux-amd64.tar.gz
 $ sudo mv linux-amd64/helm $BINARY_DIR/helm
 $ sudo chmod +x $BINARY_DIR/helm
 # Kubectl
 $ curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
 $ chmod +x ./kubectl
-$ sudo mv ./kubectl /usr/local/bin/kubectl
+$ sudo mv ./kubectl $BINARY_DIR/kubectl
 $ sudo dnf install bash-completion
 $ echo 'alias k="kubectl"' >>~/.bashrc
 $ echo 'alias kgp="kubectl get pods"' >>~/.bashrc
@@ -137,14 +137,14 @@ Verification:
 ```bash
 # Helm
 $ helm version
-version.BuildInfo{Version:"v3.5.3", GitCommit:"041ce5a2c17a58be0fcd5f5e16fb3e7e95fea622", GitTreeState:"dirty", GoVersion:"go1.15.8"}
+version.BuildInfo{Version:"v3.7.1", GitCommit:"1d11fcb5d3f3bf00dbe6fe31b8412839a96b3dc4", GitTreeState:"clean", GoVersion:"go1.16.9"}
 # Kubectl
-$ kubectl version client
-Client Version: version.Info{Major:"1", Minor:"20", GitVersion:"v1.20.5", GitCommit:"6b1d87acf3c8253c123756b9e61dac642678305f", GitTreeState:"clean", BuildDate:"2021-03-18T01:10:43Z", GoVersion:"go1.15.8", Compiler:"gc", Platform:"linux/amd64"}
+$ kubectl version --client=true
+Client Version: version.Info{Major:"1", Minor:"22", GitVersion:"v1.22.2", GitCommit:"8b5a19147530eaac9476b0ab82980b4088bbc1b2", GitTreeState:"clean", BuildDate:"2021-09-15T21:38:50Z", GoVersion:"go1.16.8", Compiler:"gc", Platform:"linux/amd64"}
 # RKE2
 $ rke2 --version
-rke2 version v1.19.8+rke2r1 (77ad545580efc4ab64ce231d4a75fa2e493956a3)
-go version go1.15.8b5
+rke2 version v1.21.5+rke2r2 (9e4acdc6018ae74c36523c99af25ab861f3884da)
+go version go1.16.6b7
 ```
 
 Sources:
@@ -241,9 +241,9 @@ exclude=rke2-*
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```bash
 $ sudo rpm -qa "*rke2*"
-rke2-common-1.19.8~rke2r1-0.el8.x86_64
-rke2-server-1.19.8~rke2r1-0.el8.x86_64
-rke2-selinux-0.4-1.el8.noarch
+rke2-server-1.21.5~rke2r2-0.el8.x86_64
+rke2-common-1.21.5~rke2r2-0.el8.x86_64
+rke2-selinux-0.8-2.el8.noarch
 ```
 
 Sources:
@@ -273,7 +273,7 @@ Verification:
 ```bash
 $ kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
-node1.example.com   Ready    etcd,master   5m13s   v1.19.8+rke2r1
+node1.example.com   Ready    etcd,master   5m13s   v1.21.5+rke2r2
 ```
 
 # Basic Infrastructure Components

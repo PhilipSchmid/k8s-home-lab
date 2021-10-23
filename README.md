@@ -50,9 +50,9 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [Networking using Cilium (CNI)](#networking-using-cilium-cni)
     - [Cilium Prerequisites](#cilium-prerequisites)
     - [Cilium Installation](#cilium-installation)
-  - [Persistent Storage using NFS-Client Provisioner](#persistent-storage-using-nfs-client-provisioner)
-    - [NFS-Client Provisioner Prerequisites](#nfs-client-provisioner-prerequisites)
-    - [NFS-Client Provisioner Installation](#nfs-client-provisioner-installation)
+  - [Persistent Storage using NFS-SubDir-Provisioner](#persistent-storage-using-nfs-subdir-provisioner)
+    - [NFS-SubDir-Provisioner Prerequisites](#nfs-subdir-provisioner-prerequisites)
+    - [NFS-SubDir-Provisioner Installation](#nfs-subdir-provisioner-installation)
 - [Infrastructure related Components](#infrastructure-related-components)
   - [Deploy Nginx Ingress Controller](#deploy-nginx-ingress-controller)
     - [Nginx Ingress Controller Prerequisites](#nginx-ingress-controller-prerequisites)
@@ -399,23 +399,21 @@ Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
 - https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/
 
-## Persistent Storage using NFS-Client Provisioner
-Used to provide persistent storage via NFS from the Synology NAS. It creates sub directories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).
+## Persistent Storage using NFS-SubDir-Provisioner
+Used to provide persistent storage via NFS from the Synology NAS. It creates subdirectories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).
 
 Sources:
 - https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
-- https://artifacthub.io/packages/helm/ckotzbauer/nfs-client-provisioner
 
-### NFS-Client Provisioner Prerequisites
-Since the official helm chart [repository is deprected](https://github.com/helm/charts#%EF%B8%8F-deprecation-and-archive-notice) and no official successor of the NFS-client provisioner Helm chart is provided, we simply use [ckotzbauer/nfs-client-provisioner](https://artifacthub.io/packages/helm/ckotzbauer/nfs-client-provisioner).
-
+### NFS-SubDir-Provisioner Prerequisites
+Prepare & add the Helm chart repo:
 ```bash
-$ mkdir ~/rke2/nfs-client-provisioner
-$ helm repo add ckotzbauer https://ckotzbauer.github.io/helm-charts
+$ mkdir ~/rke2/nfs-subdir-external-provisioner
+$ helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
 $ helm repo update
 ```
 
-### NFS-Client Provisioner Installation
+### NFS-SubDir-Provisioner Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
 nfs:
@@ -425,20 +423,20 @@ nfs:
 storageClass:
   create: true
   defaultClass: true
-  name: nfs-client
+  name: nfs
   accessModes: ReadWriteMany
-
-podSecurityPolicy:
-  enabled: true
 ```
 
-Finally install the Nginx ingress controller helm chart:
+Finally, install the Nginx ingress controller helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic nfs-client-provisioner ckotzbauer/nfs-client-provisioner \
-  --version 1.0.2 \
-  --namespace nfs-client \
+$ helm upgrade -i --create-namespace --atomic nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+  --version 4.0.14 \
+  --namespace nfs-subdir-provisioner \
   -f values.yaml
 ```
+
+Sources:
+- https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/tree/master/charts/nfs-subdir-external-provisioner
 
 # Infrastructure related Components
 

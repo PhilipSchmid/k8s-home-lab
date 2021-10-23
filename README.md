@@ -1,7 +1,7 @@
 # Kubernetes in a Home Lab Environment
 This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
-In the end, I will probably run some applications on top of this technology stack but the main goal is to improve my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready** since the chaining of the different tools and their configurations has not been tested really well.
+In the end, I will probably run some applications on top of this technology stack, but the main goal is to strengthen my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready**, since the chaining of the different tools and their configurations has not been tested really well.
 
 ![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
 
@@ -18,8 +18,8 @@ The technologies down here will probably change in the future. Nevertheless, the
 | CSI                    | NFS-Client Provisioner                          | Done      |
 | Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) | Done      |
 | Ingress Controller     | Nginx                                           | Done      |
-| Control Plane          | Rancher 2.5                                     | Done      |
-| Control Plane Backup   | Rancher Backup                                  | Done      |
+| Control Plane          | Rancher 2.6                                     | Done      |
+| Control Plane Backup   | Rancher Backups                                 | Done      |
 | Monitoring             | Prometheus Stack via Rancher Monitoring         | Done      |
 | Persistent Data Backup | Kanister                                        | On hold * |
 | App Deployment         | Helm & Fleet                                    | Done      |
@@ -64,7 +64,7 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [External-DNS](#external-dns)
     - [External-DNS Prerequisites](#external-dns-prerequisites)
     - [External-DNS Installation](#external-dns-installation)
-  - [Rancher (2.5.X)](#rancher-25x)
+  - [Rancher (2.6.X)](#rancher-26x)
     - [Rancher Prerequisites](#rancher-prerequisites)
     - [Rancher Installation](#rancher-installation)
     - [Rancher Backups](#rancher-backups)
@@ -85,7 +85,7 @@ The technologies down here will probably change in the future. Nevertheless, the
 # Hardware
 One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS service from DigitalOcean.
 
-In my case I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core(TM) i7-10710U CPU @ 1.10GHz`) and 64 GB memory (`2 x 32 GB DDR4-2666`).
+In my case, I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Core(TM) i7-10710U CPU @ 1.10GHz`) and 64 GB memory (`2 x 32 GB DDR4-2666`).
 
 # Prerequisites
 
@@ -175,7 +175,7 @@ disable:
   - rke2-kube-proxy
 ```
 
-**Note:** I disabled `rke2-canal` and `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable `rke2-kube-proxy` if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my own taste (Daemonset in host network namespace).
+**Note:** I disabled `rke2-canal` and `rke2-kube-proxy` since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable `rke2-kube-proxy` if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste (Daemonset in host network namespace).
 
 ### Firewall
 Ensure to open the required ports:
@@ -231,7 +231,7 @@ Source:
 - https://docs.rke2.io/install/requirements/#networking
 
 ### Prevent RKE2 Package Updates
-In order to provide more stability, I chose to DNF/YUM "mark/hold" the RKE2 related packages so a `dnf update`/`yum update` does not mess around with them.
+To provide more stability, I chose to DNF/YUM "mark/hold" the RKE2 related packages so a `dnf update`/`yum update` does not mess around with them.
 
 Add the following line to `/etc/dnf/dnf.conf` and/or `/etc/yum.conf`:
 ```bash
@@ -282,7 +282,7 @@ node1.example.com   Ready    etcd,master   5m13s   v1.19.8+rke2r1
 
 ### Cilium Prerequisites
 
-Ensure the eBFP filesystem is mounted (which should already be the case on RHEL 8.3):
+Ensure the eBFP file system is mounted (which should already be the case on RHEL 8.3):
 ```bash
 $ mount | grep /sys/fs/bpf
 # if present should output, e.g. "none on /sys/fs/bpf type bpf"...
@@ -441,7 +441,7 @@ Sources:
 # Infrastructure related Components
 
 ## Deploy Nginx Ingress Controller
-The Nginx ingress controller is deployed as Daemonset within the host network namespace. This way the Nginx ingress controller is able to see the actual client IP where this would not be possible without any workarounds when the Nginx ingress controller would be deployed as Deployment outside of the host's network namespace.
+The Nginx ingress controller is deployed as Daemonset within the host network namespace. This way the Nginx ingress controller can see the actual client IP where this would not be possible without any workarounds when the Nginx ingress controller would be deployed as Deployment outside the host's network namespace.
 
 ### Nginx Ingress Controller Prerequisites
 Prepare & add the Helm chart repo:
@@ -482,7 +482,7 @@ controller:
     enabled: false
 ```
 
-Finally install the Nginx ingress controller helm chart:
+Finally, install the Nginx ingress controller helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
   --version 3.26.0 \
@@ -530,7 +530,7 @@ Sources:
 - https://cert-manager.io/docs/installation/kubernetes/#installing-with-helm
 
 ### Let's Encrypt DNS-Challenge DigitalOcean ClusterIssuer
-Crete a Cert-Manager ClusterIssuer, which is able to issue Let's Encrypt certificates using the DNS01 challenge via DigitalOcean.
+Create a Cert-Manager ClusterIssuer, which can issue Let's Encrypt certificates using the DNS01 challenge via DigitalOcean.
 
 ```bash
 $ mkdir ~/rke2/cert-manager
@@ -618,7 +618,7 @@ digitalocean:
   apiToken: "access-token here"
 ```
 
-Finally install the External-DNS helm chart:
+Finally, install the External-DNS helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
   --version 4.9.4 \
@@ -631,10 +631,10 @@ Verification:
 $ kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
 ```
 
-## Rancher (2.5.X)
+## Rancher (2.6.X)
 
 Sources:
-- https://rancher.com/docs/rancher/v2.x/en/installation/install-rancher-on-k8s/
+- https://rancher.com/docs/rancher/v2.6/en/installation/install-rancher-on-k8s/
 
 ### Rancher Prerequisites
 Prepare & add the Helm chart repo:
@@ -685,10 +685,10 @@ auditLog:
   level: 1
 ```
 
-Finally install the Rancher helm chart:
+Finally, install the Rancher helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
-  --version 2.5.7 \
+  --version 2.6.2 \
   --namespace cattle-system \
   -f values.yaml
 ```
@@ -703,27 +703,28 @@ deployment "rancher" successfully rolled out
 ![Rancher Dashboard with official Let's Encrypt Certificate](images/rancher-dashboard-with-cert.png)
 
 Sources:
-- https://rancher.com/docs/rancher/v2.x/en/installation/resources/chart-options/
+- https://rancher.com/docs/rancher/v2.6/en/installation/install-rancher-on-k8s/chart-options/
 - https://github.com/rancher/rancher/issues/26850#issuecomment-658644922
 
 ### Rancher Backups
-Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which is able to backup/restore all K8s and CRD resources that Rancher creates and manages.
+Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which can backup/restore all K8s and CRD resources that Rancher creates and manages.
 Backup target can be a Persistent Volume or a S3 bucket.
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/
 
 #### Rancher Backups Installation
-Navigate to the "App & Marketplace" in Rancher and search for the "Rancher Backups" chart. Configure the settings down here:
+Select the `local` cluster, navigate to the "App & Marketplace" -> "Charts" menu and search for the "Rancher Backups" chart. Configure the settings down here:
 
-![Rancher Backups Settings](images/rancher-backups-settings.png)
+![Rancher Backups Settings 1](images/rancher-backups-settings-1.png)
+![Rancher Backups Settings 2](images/rancher-backups-settings-2.png)
 
 Next, change the Rancher Backups PersistentVolume reclaim policy to `Retain` (since the `nfs-client` Storageclass uses `Delete` by default):
 
 ```bash
 $ kubectl patch pv <rancher-backup-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 # E.g.:
-$ kubectl patch pv pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+$ kubectl patch pv pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 ```
 
 Verification:
@@ -731,14 +732,14 @@ Verification:
 # Before
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
-pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679   10Gi       RWO            Delete           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs-client              75s
+pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a   10Gi       RWO            Delete           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     29s
 # Change Retention Policy
-$ kubectl patch pv pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-persistentvolume/pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679 patched
+$ kubectl patch pv pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+persistentvolume/pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a patched
 # After
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
-pvc-cc2a9a75-a6b2-49f2-83bb-30229c84a679   10Gi       RWO            Retain           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs-client              2m21s
+pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a   10Gi       RWO            Retain           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     56s
 ```
 
 Finally, navigate to the "Rancher Backups" menu and configure a new scheduled backup job or simply create a new CR which does basically the same:
@@ -757,7 +758,7 @@ spec:
   schedule: 0 */2 * * *
 ```
 
-More backup YAML examples can be found here: https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/examples/
+More backup YAML examples can be found here: https://rancher.com/docs/rancher/v2.6/en/backups/configuration/backup-config/
 
 Verification:
 ![Rancher Backup Job](images/rancher-backup-job.png)
@@ -765,18 +766,19 @@ Verification:
 ### Rancher Monitoring
 Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use it this way.
 
-Navigate to the "App & Marketplace" in Rancher and search for the "Monitoring" chart. Leave nearly all settings default but enable persistent storage for Prometheus:
+Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "Monitoring" chart. Leave nearly all settings default but enable persistent storage for Prometheus:
 
-![Rancher Monitoring Settings](images/rancher-monitoring-settings.png)
+![Rancher Monitoring Settings Prometheus](images/rancher-monitoring-setting-prometheus.png)
+![Rancher Monitoring Settings Grafana](images/rancher-monitoring-setting-grafana.png)
 
-Also click on `Edit as YAML` and search for the `rke2Proxy` section in order to disable it:
+Also click on `Edit as YAML` and search for the `rke2Proxy` section to disable it:
 ```yaml
 rke2Proxy:
   enabled: false
 ```
 (We simply can't use the kube-proxy metrics target since we disabled it completely ("kube-proxy less" Cilium).)
 
-Finally click "Install" and wait a few minutes.
+Finally, click "Install" and wait a few minutes.
 
 **Hints:**
 - Ensure to open `9796/TCP` on the node since the RKE2 deployed node-exporter provides the Rancher Monitoring metrics via this port.
@@ -784,10 +786,10 @@ Finally click "Install" and wait a few minutes.
 - If the Grafana pod does not come up properly, ensure your NFS share squash settings allow the Grafana init container to change the ownership of files/directories inside its NFS based PV.
 
 Sources:
-- https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/
+- https://rancher.com/docs/rancher/v2.6/en/monitoring-alerting/
 
 #### Cilium & Nginx Ingress Monitoring
-Since we now have deployed the Prometheus stack, we should be able to enable the Cilium & Nginx ingress monitoring which are also based on the `ServiceMonitor` CRDs from the Prometheus stack. Add the following properties to the Cilium `values.yaml` file and redeploy it (keep all other values as shown before):
+Since we now have deployed the Prometheus stack, we should be able to enable the Cilium & Nginx ingress monitoring, which are also based on the `ServiceMonitor` CRDs from the Prometheus stack. Add the following properties to the Cilium `values.yaml` file and redeploy it (keep all other values as shown before):
 
 ```yaml
 hubble:
@@ -818,7 +820,7 @@ controller:
 ```
 
 #### Cilium Grafana Dashboards
-There are currently 3 publicy available Grafana Dashboards from Cilium:
+There are currently 3 public available Grafana Dashboards from Cilium:
 
 - [Cilium v1.9 Agent Metrics](https://grafana.com/grafana/dashboards/13537)
 - [Cilium v1.9 Hubble Metrics](https://grafana.com/grafana/dashboards/13539)
@@ -873,7 +875,7 @@ Sources:
 - https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/migrating/#migrating-grafana-dashboards
 
 #### Custom Nginx Ingress & Cluster Capacity Management Dashboard
-When installing the Prometheus stack, I also often deploy some other nice Grafna Dashboards like this one for the Nginx ingress:
+When installing the Prometheus stack, I also often deploy some other nice Grafana Dashboards like this one for the Nginx ingress:
 
 ![Nginx Ingress Gafana Dashboard](images/nginx-dashboard.png)
 
@@ -895,7 +897,7 @@ TODO
 TODO
 
 ## GitOps using Fleet
-I first wanted to use ArgoCD to deploy applications with the GitOps approach on the K8s cluster but then I realized, Rancher 2.5+ already comes with Fleet preinstalled and that it also offers a quite nice UI integration. I therefore chose to give Fleet a try.
+I first wanted to use ArgoCD to deploy applications with the GitOps approach on the K8s cluster, but then I realized, Rancher 2.5+ already comes with Fleet preinstalled and that it also offers a quite nice UI integration. I therefore chose to give Fleet a try.
 
 Sources:
 - https://rancher.com/docs/rancher/v2.x/en/deploy-across-clusters/fleet
@@ -916,7 +918,7 @@ fleet-controller-767b564d9f-fshp6   1/1     Running   0          2m35s
 ```
 
 ### Fleet Configuration
-In order to manage the RKE2 `local` cluster, you need to switch to the `fleet-local` namespace as the `local` cluster should already be added there since Rancher 2.5+ automatically deployed a fleet-agent in it:
+To manage the RKE2 `local` cluster, you need to switch to the `fleet-local` namespace as the `local` cluster should already be added there since Rancher 2.5+ automatically deployed a fleet-agent in it:
 
 ```bash
 $ kubectl get clusters.fleet.cattle.io -A
@@ -926,9 +928,9 @@ fleet-local   local   1/1             1/1           node1.example.com   2020-12-
 
 ![Fleet local Cluster](images/fleet-local-cluster.png)
 
-The final fleet basic configuration step is to add a Git repository which is later used to store the Fleet managed manifests. I chose to also host this on Github inside the private https://github.com/PhilipSchmid/home-lab-fleet-manifests repository.
+The final fleet basic configuration step is to add a Git repository, which is later used to store the Fleet managed manifests. I chose to also host this on Github inside the private https://github.com/PhilipSchmid/home-lab-fleet-manifests repository.
 
-To allow Fleet to access a private Git repository, you must create a SSH key which is then added as deployment key. More information about this process can be found here: https://fleet.rancher.io/gitrepo-add/
+To allow Fleet to access a private Git repository, you must create a SSH key, which is then added as the deployment key. More information about this process can be found here: https://fleet.rancher.io/gitrepo-add/
 
 ```bash
 $ mkdir ~/rke2/fleet
@@ -946,7 +948,7 @@ $ kubectl create secret generic fleet-github-ssh-key \
 
 Do not forget to add the just generated public key as deploy key on the Github Git repository (read permissions should be sufficient)
 
-Finally it's time to configure the GitRepo CR (`home-lab-fleet-manifests.yaml`):
+Finally, it's time to configure the GitRepo CR (`home-lab-fleet-manifests.yaml`):
 ```yaml
 apiVersion: fleet.cattle.io/v1alpha1
 kind: GitRepo
@@ -1014,11 +1016,11 @@ diff:
 
 **Note:** The `diff.comparePatches` section is required since Fleet would otherwise recognize the Minio Helm chart created Ingress object as `modified` all the time. Error: `Modified(1) [Cluster fleet-local/local]; ingress.networking.k8s.io fleet-app-minio/minio modified {"spec":{"rules":[{"host":"minio.example.com","http":{"paths":[{"backend":{"serviceName":"minio","servicePort":9000},"path":"/"}]}}]}}`
 
-Finally push this `fleet.yaml` file to the repositorys `master` branch. Fleet should then automatically start to deploy the Minio application via the specified Helm chart.
+Finally, push this `fleet.yaml` file to the repositories `master` branch. Fleet should then automatically start to deploy the Minio application via the specified Helm chart.
 
 ![Fleet Minio Deployment](images/rancher-fleet-minio-git-repo-active.png)
 
-To get the Minio secret and accesskey, issue the following commands:
+To get the Minio secret and access key, issue the following commands:
 ```bash
 $ kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.accesskey}' | base64 -d
 $ kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.secretkey}' | base64 -d

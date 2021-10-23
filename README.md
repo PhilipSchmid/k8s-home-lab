@@ -619,7 +619,7 @@ digitalocean:
 Finally, install the External-DNS helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
-  --version 4.9.4 \
+  --version 5.4.13 \
   --namespace external-dns \
   -f values.yaml
 ```

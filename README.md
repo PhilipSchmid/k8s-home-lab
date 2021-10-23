@@ -15,7 +15,7 @@ The technologies down here will probably change in the future. Nevertheless, the
 | Distributon            | Rancher (RKE2)                                  | Done      |
 | CRI                    | containerd (included in RKE2)                   | Done      |
 | CNI                    | Cilium                                          | Done      |
-| CSI                    | NFS-Client Provisioner                          | Done      |
+| CSI                    | NFS SubDir External Provisioner                 | Done      |
 | Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) | Done      |
 | Ingress Controller     | Nginx                                           | Done      |
 | Control Plane          | Rancher 2.6                                     | Done      |
@@ -50,9 +50,9 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [Networking using Cilium (CNI)](#networking-using-cilium-cni)
     - [Cilium Prerequisites](#cilium-prerequisites)
     - [Cilium Installation](#cilium-installation)
-  - [Persistent Storage using NFS-SubDir-Provisioner](#persistent-storage-using-nfs-subdir-provisioner)
-    - [NFS-SubDir-Provisioner Prerequisites](#nfs-subdir-provisioner-prerequisites)
-    - [NFS-SubDir-Provisioner Installation](#nfs-subdir-provisioner-installation)
+  - [Persistent Storage using NFS-SubDir-External-Provisioner](#persistent-storage-using-nfs-subdir-external-provisioner)
+    - [NFS-SubDir-External-Provisioner Prerequisites](#nfs-subdir-external-provisioner-prerequisites)
+    - [NFS-SubDir-External-Provisioner Installation](#nfs-subdir-external-provisioner-installation)
 - [Infrastructure related Components](#infrastructure-related-components)
   - [Deploy Nginx Ingress Controller](#deploy-nginx-ingress-controller)
     - [Nginx Ingress Controller Prerequisites](#nginx-ingress-controller-prerequisites)
@@ -399,13 +399,13 @@ Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
 - https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/
 
-## Persistent Storage using NFS-SubDir-Provisioner
+## Persistent Storage using NFS-SubDir-External-Provisioner
 Used to provide persistent storage via NFS from the Synology NAS. It creates subdirectories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).
 
 Sources:
 - https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
 
-### NFS-SubDir-Provisioner Prerequisites
+### NFS-SubDir-External-Provisioner Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
 $ mkdir ~/rke2/nfs-subdir-external-provisioner
@@ -413,7 +413,7 @@ $ helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.i
 $ helm repo update
 ```
 
-### NFS-SubDir-Provisioner Installation
+### NFS-SubDir-External-Provisioner Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
 nfs:

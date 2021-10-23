@@ -427,7 +427,7 @@ storageClass:
   accessModes: ReadWriteMany
 ```
 
-Finally, install the Nginx ingress controller helm chart:
+Finally, install the NFS SubDir external provisioner helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
   --version 4.0.14 \
@@ -459,6 +459,8 @@ controller:
   hostNetwork: true
   kind: "DaemonSet"
 
+  watchIngressWithoutClass: true
+
   publishService:
     enabled: false
   
@@ -485,7 +487,7 @@ controller:
 Finally, install the Nginx ingress controller helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
-  --version 3.26.0 \
+  --version 4.0.6 \
   --namespace ingress-nginx \
   -f values.yaml
 ```
@@ -493,16 +495,11 @@ $ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx 
 Sources:
 - https://kubernetes.github.io/ingress-nginx/deploy/#using-helm
 - https://github.com/kubernetes/ingress-nginx/tree/master/charts/ingress-nginx
-- https://github.com/kubernetes/ingress-nginx/blob/master/charts/ingress-nginx/values.yaml
+- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.0.6/charts/ingress-nginx
 
 ## Cert-Manager
 
 ### Cert-Manager Prerequisites
-Install the required CRDs:
-```
-$ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.2.0/cert-manager.crds.yaml
-```
-
 Prepare & add the Helm chart repo:
 ```bash
 $ helm repo add jetstack https://charts.jetstack.io
@@ -514,16 +511,17 @@ Install the Cert-Manager controller helm chart:
 ```bash
 $ helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
   --namespace cert-manager \
-  --version v1.2.0
+  --set installCRDs=true \
+  --version v1.5.4
 ```
 
 Verification:
 ```bash
 $ kubectl get pods --namespace cert-manager
 NAME                                       READY   STATUS    RESTARTS   AGE
-cert-manager-5fd9d77768-nm72s              1/1     Running   0          14s
-cert-manager-cainjector-78cbd59555-tk666   1/1     Running   0          14s
-cert-manager-webhook-756d477cc4-8pj2l      1/1     Running   0          14s
+cert-manager-74f46787b6-548rg              1/1     Running   0          78s
+cert-manager-cainjector-748dc889c5-qhlqf   1/1     Running   0          78s
+cert-manager-webhook-5b679f47d6-8ddcl      1/1     Running   0          78s
 ```
 
 Sources:
@@ -768,8 +766,8 @@ Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-s
 
 Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "Monitoring" chart. Leave nearly all settings default but enable persistent storage for Prometheus:
 
-![Rancher Monitoring Settings Prometheus](images/rancher-monitoring-setting-prometheus.png)
-![Rancher Monitoring Settings Grafana](images/rancher-monitoring-setting-grafana.png)
+![Rancher Monitoring Settings Prometheus](images/rancher-monitoring-settings-prometheus.png)
+![Rancher Monitoring Settings Grafana](images/rancher-monitoring-settings-grafana.png)
 
 Also click on `Edit as YAML` and search for the `rke2Proxy` section to disable it:
 ```yaml

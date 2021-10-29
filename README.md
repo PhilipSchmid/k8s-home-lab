@@ -276,6 +276,12 @@ NAME                    STATUS   ROLES         AGE     VERSION
 node1.example.com   Ready    etcd,master   5m13s   v1.21.5+rke2r2
 ```
 
+Troubleshooting RKE2 containers (locally on a RKE2 server node):
+```bash
+$ /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps
+$ /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-name>
+```
+
 # Basic Infrastructure Components
 
 ## Networking using Cilium (CNI)

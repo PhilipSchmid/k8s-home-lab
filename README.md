@@ -130,8 +130,10 @@ echo 'source <(kubectl completion bash)' >>~/.bashrc
 echo 'complete -F __start_kubectl k' >>~/.bashrc
 source ~/.bashrc
 # RKE2
-curl -sfL https://get.rke2.io | sudo sh -
+curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_CHANNEL=v1.21 sh -
 ```
+
+**Note:** `INSTALL_RKE2_CHANNEL` is currently required to be set to `v1.21` version as [Rancher 2.6.3](https://github.com/rancher/rancher/releases/tag/v2.6.3) currently does not support K8s 1.22 and newer!
 
 Verification:
 ```
@@ -143,8 +145,8 @@ $ kubectl version --client=true
 Client Version: version.Info{Major:"1", Minor:"22", GitVersion:"v1.22.2", GitCommit:"8b5a19147530eaac9476b0ab82980b4088bbc1b2", GitTreeState:"clean", BuildDate:"2021-09-15T21:38:50Z", GoVersion:"go1.16.8", Compiler:"gc", Platform:"linux/amd64"}
 # RKE2
 $ rke2 --version
-rke2 version v1.21.5+rke2r2 (9e4acdc6018ae74c36523c99af25ab861f3884da)
-go version go1.16.6b7
+rke2 version v1.21.8+rke2r1 (68d5b68526361fd050a861fc07126a30980b897e)
+go version go1.16.10b7
 ```
 
 Optional: Install `kubectl` plugins `kubens` and `kubectx` via [krew](https://krew.sigs.k8s.io/):
@@ -268,9 +270,9 @@ exclude=rke2-*
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```
 $ sudo rpm -qa "*rke2*"
-rke2-server-1.21.5~rke2r2-0.el8.x86_64
-rke2-common-1.21.5~rke2r2-0.el8.x86_64
-rke2-selinux-0.8-2.el8.noarch
+rke2-server-1.21.8~rke2r1-0.el8.x86_64
+rke2-selinux-0.9-1.el8.noarch
+rke2-common-1.21.8~rke2r1-0.el8.x86_64
 ```
 
 Sources:
@@ -299,8 +301,8 @@ chmod 600 ~/.kube/config
 Verification:
 ```
 $ kubectl get nodes
-NAME                    STATUS   ROLES         AGE     VERSION
-node1.example.com   Ready    etcd,master   5m13s   v1.21.5+rke2r2
+NAME                    STATUS     ROLES                       AGE   VERSION
+node1.example.com       NotReady   control-plane,etcd,master   50s   v1.21.8+rke2r1
 ```
 
 Troubleshooting RKE2 containers (locally on a RKE2 server node):

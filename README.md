@@ -93,48 +93,48 @@ In my case, I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Cor
 Download and install Red Hat 8 server from https://developers.redhat.com/topics/linux. After creating a free developer account, you will be able to run 1 Red Hat enterprise server for free (development use only).
 
 ### Disable Swap
-```
-$ free -h
-$ sudo swapoff -a
-$ sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
-$ free -h
+```bash
+free -h
+sudo swapoff -a
+sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
+free -h
 ```
 
 ## Working Directory
 Create a working directory where e.g. Helm `values.yaml` files will be stored in the future:
 ```bash
-$ mkdir ~/rke2
-$ cd ~/rke2
+mkdir ~/rke2
+cd ~/rke2
 ```
 
 ## Kubectl, Helm & RKE2
 Install `kubectl`, `helm` and RKE2 to the host system:
 ```bash
-$ BINARY_DIR="/usr/local/bin"
-$ cd /tmp
+BINARY_DIR="/usr/local/bin"
+cd /tmp
 # Helm
-$ wget https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz
-$ tar -zxvf helm-*-linux-amd64.tar.gz
-$ sudo mv linux-amd64/helm $BINARY_DIR/helm
-$ sudo chmod +x $BINARY_DIR/helm
+wget https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz
+tar -zxvf helm-*-linux-amd64.tar.gz
+sudo mv linux-amd64/helm $BINARY_DIR/helm
+sudo chmod +x $BINARY_DIR/helm
 # Kubectl
-$ curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
-$ chmod +x ./kubectl
-$ sudo mv ./kubectl $BINARY_DIR/kubectl
-$ sudo dnf install bash-completion
-$ echo 'alias k="kubectl"' >>~/.bashrc
-$ echo 'alias kgp="kubectl get pods"' >>~/.bashrc
-$ echo 'alias kgn="kubectl get nodes"' >>~/.bashrc
-$ echo 'alias kga="kubectl get all -A"' >>~/.bashrc
-$ echo 'source <(kubectl completion bash)' >>~/.bashrc
-$ echo 'complete -F __start_kubectl k' >>~/.bashrc
-$ source ~/.bashrc
+curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x ./kubectl
+sudo mv ./kubectl $BINARY_DIR/kubectl
+sudo dnf install bash-completion
+echo 'alias k="kubectl"' >>~/.bashrc
+echo 'alias kgp="kubectl get pods"' >>~/.bashrc
+echo 'alias kgn="kubectl get nodes"' >>~/.bashrc
+echo 'alias kga="kubectl get all -A"' >>~/.bashrc
+echo 'source <(kubectl completion bash)' >>~/.bashrc
+echo 'complete -F __start_kubectl k' >>~/.bashrc
+source ~/.bashrc
 # RKE2
-$ curl -sfL https://get.rke2.io | sudo sh -
+curl -sfL https://get.rke2.io | sudo sh -
 ```
 
 Verification:
-```bash
+```
 # Helm
 $ helm version
 version.BuildInfo{Version:"v3.7.1", GitCommit:"1d11fcb5d3f3bf00dbe6fe31b8412839a96b3dc4", GitTreeState:"clean", GoVersion:"go1.16.9"}
@@ -147,11 +147,38 @@ rke2 version v1.21.5+rke2r2 (9e4acdc6018ae74c36523c99af25ab861f3884da)
 go version go1.16.6b7
 ```
 
+Optional: Install `kubectl` plugins `kubens` and `kubectx` via [krew](https://krew.sigs.k8s.io/):
+```bash
+# Krew installation
+(
+  set -x; cd "$(mktemp -d)" &&
+  OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
+  ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
+  KREW="krew-${OS}_${ARCH}" &&
+  curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz" &&
+  tar zxvf "${KREW}.tar.gz" &&
+  ./"${KREW}" install krew
+)
+echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >>~/.bashrc
+# Install kubens and kubectx
+kubectl krew install ctx
+kubectl krew install ns
+# Install fzf to use kubens and kubectx in interactive mode
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install
+# Add aliases to bashrc
+echo 'alias kctx="kubectl-ctx"' >>~/.bashrc
+echo 'alias kns="kubectl-ns"' >>~/.bashrc
+```
+
 Sources:
 - https://helm.sh/docs/intro/install/
 - https://kubernetes.io/docs/tasks/tools/install-kubectl/#install-kubectl-on-linux
 - https://docs.rke2.io/install/methods/#rpm
 - https://kubernetes.io/docs/tasks/tools/install-kubectl/#optional-kubectl-configurations
+- https://krew.sigs.k8s.io/docs/user-guide/setup/install/#bash
+- https://github.com/ahmetb/kubectx#kubectl-plugins-macos-and-linux
+- https://github.com/junegunn/fzf#using-git
 
 ## VPN Remote Access to the Host via Wireguard (optional)
 See https://gist.github.com/PhilipSchmid/b2ac0774fa99ec1286d63d2307a570a3 for more information.
@@ -181,36 +208,36 @@ disable:
 Ensure to open the required ports:
 ```bash
 ### RKE2 specific ports
-$ sudo firewall-cmd --add-port=9345/tcp --permanent
-$ sudo firewall-cmd --add-port=6443/tcp --permanent
-$ sudo firewall-cmd --add-port=10250/tcp --permanent
-$ sudo firewall-cmd --add-port=2379/tcp --permanent
-$ sudo firewall-cmd --add-port=2380/tcp --permanent
-$ sudo firewall-cmd --add-port=30000-32767/tcp --permanent
+sudo firewall-cmd --add-port=9345/tcp --permanent
+sudo firewall-cmd --add-port=6443/tcp --permanent
+sudo firewall-cmd --add-port=10250/tcp --permanent
+sudo firewall-cmd --add-port=2379/tcp --permanent
+sudo firewall-cmd --add-port=2380/tcp --permanent
+sudo firewall-cmd --add-port=30000-32767/tcp --permanent
 # Used for the Rancher Monitoring
-$ sudo firewall-cmd --add-port=9796/tcp --permanent
-$ sudo firewall-cmd --add-port=19090/tcp --permanent
-$ sudo firewall-cmd --add-port=6942/tcp --permanent
-$ sudo firewall-cmd --add-port=9091/tcp --permanent
+sudo firewall-cmd --add-port=9796/tcp --permanent
+sudo firewall-cmd --add-port=19090/tcp --permanent
+sudo firewall-cmd --add-port=6942/tcp --permanent
+sudo firewall-cmd --add-port=9091/tcp --permanent
 ### CNI specific ports
 # 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows
-$ sudo firewall-cmd --add-port=4244/tcp --permanent
+sudo firewall-cmd --add-port=4244/tcp --permanent
 # Cilium healthcheck related permits:
-$ sudo firewall-cmd --add-port=4240/tcp --permanent
-$ sudo firewall-cmd --remove-icmp-block=echo-request --permanent
-$ sudo firewall-cmd --remove-icmp-block=echo-reply --permanent
+sudo firewall-cmd --add-port=4240/tcp --permanent
+sudo firewall-cmd --remove-icmp-block=echo-request --permanent
+sudo firewall-cmd --remove-icmp-block=echo-reply --permanent
 # Since we are using Cilium with GENEVE as overlay, we need the following port too:
-$ sudo firewall-cmd --add-port=6081/udp --permanent
+sudo firewall-cmd --add-port=6081/udp --permanent
 ### Ingress Controller specific ports
-$ sudo firewall-cmd --add-port=80/tcp --permanent
-$ sudo firewall-cmd --add-port=443/tcp --permanent
-$ sudo firewall-cmd --add-port=10254/tcp --permanent
+sudo firewall-cmd --add-port=80/tcp --permanent
+sudo firewall-cmd --add-port=443/tcp --permanent
+sudo firewall-cmd --add-port=10254/tcp --permanent
 ### Finally apply all the firewall changes
-$ sudo firewall-cmd --reload
+sudo firewall-cmd --reload
 ```
 
 Verification:
-```bash
+```
 $ sudo firewall-cmd --list-all
 public (active)
   target: default
@@ -234,12 +261,12 @@ Source:
 To provide more stability, I chose to DNF/YUM "mark/hold" the RKE2 related packages so a `dnf update`/`yum update` does not mess around with them.
 
 Add the following line to `/etc/dnf/dnf.conf` and/or `/etc/yum.conf`:
-```bash
+```
 exclude=rke2-*
 ```
 
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
-```bash
+```
 $ sudo rpm -qa "*rke2*"
 rke2-server-1.21.5~rke2r2-0.el8.x86_64
 rke2-common-1.21.5~rke2r2-0.el8.x86_64
@@ -253,24 +280,24 @@ Sources:
 ## Starting RKE2
 Enable the `rke2-server` service and start it:
 ```bash
-$ sudo systemctl enable rke2-server --now
+sudo systemctl enable rke2-server --now
 ```
 
 Verification:
 ```bash
-$ sudo systemctl status rke2-server
-$ sudo journalctl -u rke2-server -f
+sudo systemctl status rke2-server
+sudo journalctl -u rke2-server -f
 ```
 
 ## Configure Kubectl (on RKE2 Host)
 ```bash
-$ mkdir ~/.kube
-$ cp /etc/rancher/rke2/rke2.yaml ~/.kube/config
-$ chmod 600 ~/.kube/config
+mkdir ~/.kube
+cp /etc/rancher/rke2/rke2.yaml ~/.kube/config
+chmod 600 ~/.kube/config
 ```
 
 Verification:
-```bash
+```
 $ kubectl get nodes
 NAME                    STATUS   ROLES         AGE     VERSION
 node1.example.com   Ready    etcd,master   5m13s   v1.21.5+rke2r2
@@ -278,8 +305,8 @@ node1.example.com   Ready    etcd,master   5m13s   v1.21.5+rke2r2
 
 Troubleshooting RKE2 containers (locally on a RKE2 server node):
 ```bash
-$ /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps
-$ /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-name>
+/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps
+/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-name>
 ```
 
 # Basic Infrastructure Components
@@ -290,24 +317,24 @@ $ /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/cric
 
 Ensure the eBFP file system is mounted (which should already be the case on RHEL 8.3):
 ```bash
-$ mount | grep /sys/fs/bpf
+mount | grep /sys/fs/bpf
 # if present should output, e.g. "none on /sys/fs/bpf type bpf"...
 ```
 
 If that's not the case, mount it using the commands down here:
 ```bash
-$ sudo mount bpffs -t bpf /sys/fs/bpf
-$ sudo bash -c 'cat <<EOF >> /etc/fstab
+sudo mount bpffs -t bpf /sys/fs/bpf
+sudo bash -c 'cat <<EOF >> /etc/fstab
 none /sys/fs/bpf bpf rw,relatime 0 0
 EOF'
 ```
 
 Prepare & add the Helm chart repo:
 ```bash
-$ cd ~/rke2
-$ mkdir cilium
-$ helm repo add cilium https://helm.cilium.io/
-$ helm repo update
+cd ~/rke2
+mkdir cilium
+helm repo add cilium https://helm.cilium.io/
+helm repo update
 ```
 
 Sources:
@@ -394,7 +421,7 @@ prometheus:
 
 Finally install the Cilium helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic cilium cilium/cilium \
+helm upgrade -i --create-namespace --atomic cilium cilium/cilium \
   --version 1.10.5 \
   --namespace cilium \
   -f values.yaml
@@ -414,9 +441,9 @@ Sources:
 ### NFS-SubDir-External-Provisioner Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
-$ mkdir ~/rke2/nfs-subdir-external-provisioner
-$ helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
-$ helm repo update
+mkdir ~/rke2/nfs-subdir-external-provisioner
+helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+helm repo update
 ```
 
 ### NFS-SubDir-External-Provisioner Installation
@@ -435,7 +462,7 @@ storageClass:
 
 Finally, install the NFS SubDir external provisioner helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+helm upgrade -i --create-namespace --atomic nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
   --version 4.0.14 \
   --namespace nfs-subdir-provisioner \
   -f values.yaml
@@ -452,9 +479,9 @@ The Nginx ingress controller is deployed as Daemonset within the host network na
 ### Nginx Ingress Controller Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
-$ mkdir ~/rke2/ingress-nginx
-$ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-$ helm repo update
+mkdir ~/rke2/ingress-nginx
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
 ```
 
 ### Nginx Ingress Controller Installation
@@ -492,7 +519,7 @@ controller:
 
 Finally, install the Nginx ingress controller helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
+helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
   --version 4.0.6 \
   --namespace ingress-nginx \
   -f values.yaml
@@ -508,21 +535,21 @@ Sources:
 ### Cert-Manager Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
-$ helm repo add jetstack https://charts.jetstack.io
-$ helm repo update
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
 ```
 
 ### Cert-Manager Installation
 Install the Cert-Manager controller helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
+helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
   --namespace cert-manager \
   --set installCRDs=true \
   --version v1.5.4
 ```
 
 Verification:
-```bash
+```
 $ kubectl get pods --namespace cert-manager
 NAME                                       READY   STATUS    RESTARTS   AGE
 cert-manager-74f46787b6-548rg              1/1     Running   0          78s
@@ -537,8 +564,8 @@ Sources:
 Create a Cert-Manager ClusterIssuer, which can issue Let's Encrypt certificates using the DNS01 challenge via DigitalOcean.
 
 ```bash
-$ mkdir ~/rke2/cert-manager
-$ touch lets-encrypt-dns01-do.yaml
+mkdir ~/rke2/cert-manager
+touch lets-encrypt-dns01-do.yaml
 ```
 
 Paste the following YAML into `lets-encrypt-dns01-do.yaml`:
@@ -589,7 +616,7 @@ spec:
 
 Apply the `lets-encrypt-dns01-do.yaml` manifest:
 ```bash
-$ kubectl apply -f lets-encrypt-dns01-do.yaml
+kubectl apply -f lets-encrypt-dns01-do.yaml
 ```
 
 Sources:
@@ -607,9 +634,9 @@ Sources:
 Prepare & add the Helm chart repo:
 
 ```bash
-$ mkdir ~/rke2/external-dns
-$ helm repo add bitnami https://charts.bitnami.com/bitnami
-$ helm repo update
+mkdir ~/rke2/external-dns
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
 ```
 
 ### External-DNS Installation
@@ -624,7 +651,7 @@ digitalocean:
 
 Finally, install the External-DNS helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
+helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
   --version 5.4.13 \
   --namespace external-dns \
   -f values.yaml
@@ -632,7 +659,7 @@ $ helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns 
 
 Verification:
 ```bash
-$ kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
+kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
 ```
 
 ## Rancher (2.6.X)
@@ -644,9 +671,9 @@ Sources:
 Prepare & add the Helm chart repo:
 
 ```bash
-$ mkdir ~/rke2/rancher
-$ helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
-$ helm repo update
+mkdir ~/rke2/rancher
+helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
+helm repo update
 ```
 
 ### Rancher Installation
@@ -667,11 +694,14 @@ spec:
     kind: ClusterIssuer
 ```
 
-Apply and verify the Certificate:
+Apply Certificate:
 ```bash
-$ kubectl create ns cattle-system
-$ kubectl apply -f certificate.yaml 
-certificate.cert-manager.io/tls-rancher-ingress created
+kubectl create ns cattle-system
+kubectl apply -f certificate.yaml 
+```
+
+Verify the Certificate:
+```
 # Wait a few seconds up to a few minutes
 $ kubectl get certificate -n cattle-system
 NAME                  READY   SECRET                AGE
@@ -691,14 +721,14 @@ auditLog:
 
 Finally, install the Rancher helm chart:
 ```bash
-$ helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
+helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
   --version 2.6.2 \
   --namespace cattle-system \
   -f values.yaml
 ```
 
 Verification:
-```bash
+```
 $ kubectl -n cattle-system rollout status deploy/rancher
 Waiting for deployment "rancher" rollout to finish: 0 of 1 updated replicas are available...
 deployment "rancher" successfully rolled out
@@ -726,13 +756,15 @@ Select the `local` cluster, navigate to the "App & Marketplace" -> "Charts" menu
 Next, change the Rancher Backups PersistentVolume reclaim policy to `Retain` (since the `nfs-client` Storageclass uses `Delete` by default):
 
 ```bash
-$ kubectl patch pv <rancher-backup-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-# E.g.:
+kubectl patch pv <rancher-backup-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+```
+Example:
+```
 $ kubectl patch pv pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 ```
 
 Verification:
-```bash
+```
 # Before
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
@@ -870,7 +902,7 @@ data:
 **Note**: The Grafana dashboards did not work right away. I needed to remove all `k8s_app=\"cilium\"`/`{io_cilium_app=\"operator\"}` constraints and I also needed to add `DS_PROMETHEUS` `templating` `list` objects. If you run into the same issues, just use the provided `manifests/grafana-cilium-dashboards-cm.yaml` manifest:
 
 ```bash
-$ kubectl apply -f grafana-cilium-dashboards-cm.yaml
+kubectl apply -f grafana-cilium-dashboards-cm.yaml
 ```
 
 ![Cilium v1.9 Agent Metrics Grafana Dashboard](images/cilium-agent-metrics-grafana.png)
@@ -890,8 +922,8 @@ When installing the Prometheus stack, I also often deploy some other nice Grafan
 If you want these dashboards too, just use the provided manifests:
 
 ```bash
-$ kubectl apply -f manifests/nginx-dashboard.yaml
-$ kubectl apply -f manifests/capacity-monitoring-dashboard.yaml
+kubectl apply -f manifests/nginx-dashboard.yaml
+kubectl apply -f manifests/capacity-monitoring-dashboard.yaml
 ```
 
 ## Logging with Loki
@@ -912,7 +944,7 @@ Sources:
 No Fleet installation is required since Rancher 2.5+ already installed this app inside the `fleet-system` namespace.
 
 Verification:
-```bash
+```
 $ kubectl -n fleet-system logs -l app=fleet-controller
 <output truncated>
 time="2020-12-28T12:45:34Z" level=info msg="Cluster registration fleet-local/request-w8hv7, cluster fleet-local/local granted [true]"
@@ -924,7 +956,7 @@ fleet-controller-767b564d9f-fshp6   1/1     Running   0          2m35s
 ### Fleet Configuration
 To manage the RKE2 `local` cluster, you need to switch to the `fleet-local` namespace as the `local` cluster should already be added there since Rancher 2.5+ automatically deployed a fleet-agent in it:
 
-```bash
+```
 $ kubectl get clusters.fleet.cattle.io -A
 NAMESPACE     NAME    BUNDLES-READY   NODES-READY   SAMPLE-NODE             LAST-SEEN              STATUS
 fleet-local   local   1/1             1/1           node1.example.com   2020-12-28T12:45:52Z
@@ -937,13 +969,13 @@ The final fleet basic configuration step is to add a Git repository, which is la
 To allow Fleet to access a private Git repository, you must create a SSH key, which is then added as the deployment key. More information about this process can be found here: https://fleet.rancher.io/gitrepo-add/
 
 ```bash
-$ mkdir ~/rke2/fleet
-$ cd ~/rke2/fleet
+mkdir ~/rke2/fleet
+cd ~/rke2/fleet
 
-$ ssh-keygen -t rsa -b 4096 -m pem -C "Fleet" -f fleet_id_rsa
-$ ssh-keyscan -H github.com 2>/dev/null > github_knownhost
+ssh-keygen -t rsa -b 4096 -m pem -C "Fleet" -f fleet_id_rsa
+ssh-keyscan -H github.com 2>/dev/null > github_knownhost
 
-$ kubectl create secret generic fleet-github-ssh-key \
+kubectl create secret generic fleet-github-ssh-key \
   -n fleet-local \
   --from-file=ssh-privatekey=fleet_id_rsa \
   --from-file=known_hosts=github_knownhost \
@@ -968,7 +1000,7 @@ spec:
 ```
 
 ```bash
-$ kubectl apply -f home-lab-fleet-manifests.yaml
+kubectl apply -f home-lab-fleet-manifests.yaml
 ```
 
 Sources:
@@ -1026,8 +1058,8 @@ Finally, push this `fleet.yaml` file to the repositories `master` branch. Fleet 
 
 To get the Minio secret and access key, issue the following commands:
 ```bash
-$ kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.accesskey}' | base64 -d
-$ kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.secretkey}' | base64 -d
+kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.accesskey}' | base64 -d
+kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.secretkey}' | base64 -d
 ```
 
 Sources:

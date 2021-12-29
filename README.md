@@ -194,12 +194,16 @@ Create a RKE2 config file (`/etc/rancher/rke2/config.yaml`) with the following c
 write-kubeconfig-mode: "0644"
 tls-san:
   - "k8s.example.com"
-# Make a etcd snapshot every 6 hours
-etcd-snapshot-schedule-cron: " */6 * * *"
+# Make a etcd snapshot every 2 hours
+etcd-snapshot-schedule-cron: " */2 * * *"
 # Keep 56 etcd snapshorts (equals to 2 weeks with 6 a day)
 etcd-snapshot-retention: 56
 cni: "none"
 disable-kube-proxy: "true"
+cluster-cidr: "100.64.0.0/14"
+service-cidr: "100.68.0.0/16"
+cluster-dns: "100.68.0.10"
+selinux: "true"
 disable:
   - rke2-ingress-nginx
 ```
@@ -356,9 +360,6 @@ k8sServicePort: 6443
 tunnel: "geneve"
 
 hubble:
-  enabled: true
-
-  listenAddress: ":4244"
 
   metrics:
     # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
@@ -404,12 +405,9 @@ operator:
   #    enabled: true
 
 ipam:
-  mode: "cluster-pool"
   operator:
-    clusterPoolIPv4PodCIDR: "10.42.0.0/16"
-    clusterPoolIPv4MaskSize: 24
-    clusterPoolIPv6PodCIDR: "fd00::/104"
-    clusterPoolIPv6MaskSize: 120
+    clusterPoolIPv4PodCIDRList:
+    - "100.64.0.0/14"
 
 prometheus:
   enabled: true
@@ -423,9 +421,9 @@ prometheus:
 
 Finally install the Cilium helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic cilium cilium/cilium \
-  --version 1.10.5 \
-  --namespace cilium \
+helm upgrade -i --atomic cilium cilium/cilium \
+  --version 1.11.0 \
+  --namespace kube-system \
   -f values.yaml
 ```
 
@@ -522,7 +520,7 @@ controller:
 Finally, install the Nginx ingress controller helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
-  --version 4.0.6 \
+  --version 4.0.13 \
   --namespace ingress-nginx \
   -f values.yaml
 ```
@@ -530,7 +528,7 @@ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
 Sources:
 - https://kubernetes.github.io/ingress-nginx/deploy/#using-helm
 - https://github.com/kubernetes/ingress-nginx/tree/master/charts/ingress-nginx
-- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.0.6/charts/ingress-nginx
+- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.0.13/charts/ingress-nginx
 
 ## Cert-Manager
 
@@ -547,7 +545,7 @@ Install the Cert-Manager controller helm chart:
 helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
   --namespace cert-manager \
   --set installCRDs=true \
-  --version v1.5.4
+  --version v1.6.1
 ```
 
 Verification:
@@ -654,7 +652,7 @@ digitalocean:
 Finally, install the External-DNS helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
-  --version 5.4.13 \
+  --version 6.0.2 \
   --namespace external-dns \
   -f values.yaml
 ```
@@ -724,7 +722,7 @@ auditLog:
 Finally, install the Rancher helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
-  --version 2.6.2 \
+  --version 2.6.3 \
   --namespace cattle-system \
   -f values.yaml
 ```

@@ -212,6 +212,13 @@ cluster-dns: "100.68.0.10"
 selinux: "true"
 disable:
   - rke2-ingress-nginx
+kubelet-arg:
+- "max-pods=100"
+- "eviction-hard=memory.available<250Mi"
+- "eviction-soft=memory.available<1Gi"
+- "eviction-soft-grace-period=memory.available=2m"
+- "kube-reserved=cpu=200m,memory=500Mi"
+- "system-reserved=cpu=200m,memory=500Mi"
 ```
 
 **Note:** I set `disable-kube-proxy` to `true` and `cni` to `none`, since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste (Daemonset in host network namespace). Please also note that you'll need this same configuration on every single master node when you set up a multi-node cluster.

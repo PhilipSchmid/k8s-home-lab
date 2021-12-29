@@ -753,14 +753,14 @@ Select the `local` cluster, navigate to the "App & Marketplace" -> "Charts" menu
 ![Rancher Backups Settings 1](images/rancher-backups-settings-1.png)
 ![Rancher Backups Settings 2](images/rancher-backups-settings-2.png)
 
-Next, change the Rancher Backups PersistentVolume reclaim policy to `Retain` (since the `nfs-client` Storageclass uses `Delete` by default):
+Next, change the Rancher Backups PersistentVolume reclaim policy to `Retain` (since the `nfs` Storageclass uses `Delete` by default):
 
 ```bash
 kubectl patch pv <rancher-backup-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 ```
 Example:
 ```
-$ kubectl patch pv pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+$ kubectl patch pv pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 ```
 
 Verification:
@@ -768,14 +768,14 @@ Verification:
 # Before
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
-pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a   10Gi       RWO            Delete           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     29s
+pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2   10Gi       RWO            Delete           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     29s
 # Change Retention Policy
-$ kubectl patch pv pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-persistentvolume/pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a patched
+$ kubectl patch pv pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+persistentvolume/pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2 patched
 # After
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
-pvc-bb7dea4c-f381-4b6c-92e3-9c62fb2e7b7a   10Gi       RWO            Retain           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     56s
+pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2   10Gi       RWO            Retain           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     56s
 ```
 
 Finally, navigate to the "Rancher Backups" menu and configure a new scheduled backup job or simply create a new CR which does basically the same:
@@ -807,7 +807,7 @@ Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for t
 ![Rancher Monitoring Settings Prometheus](images/rancher-monitoring-settings-prometheus.png)
 ![Rancher Monitoring Settings Grafana](images/rancher-monitoring-settings-grafana.png)
 
-Also click on `Edit as YAML` and search for the `rke2Proxy` section to disable it:
+Also click on `Edit YAML` and search for the `rke2Proxy` section to disable it:
 ```yaml
 rke2Proxy:
   enabled: false
@@ -815,6 +815,8 @@ rke2Proxy:
 (We simply can't use the kube-proxy metrics target since we disabled it completely ("kube-proxy less" Cilium).)
 
 Finally, click "Install" and wait a few minutes.
+
+**Note:** If you run into a `StorageClass "nfs": claim Selector is not supported` issue (shown as event on the Prometheus PVC), try to manually remove the empty `selector` section from `prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec`, delete the PVC and re-run the Rancher Monitoring installation (see [issues/29755](https://github.com/rancher/rancher/issues/29755#issuecomment-717997959) for more information).
 
 **Hints:**
 - Ensure to open `9796/TCP` on the node since the RKE2 deployed node-exporter provides the Rancher Monitoring metrics via this port.

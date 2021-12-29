@@ -8,23 +8,24 @@ In the end, I will probably run some applications on top of this technology stac
 # Technologies
 The technologies down here will probably change in the future. Nevertheless, the following table should provide you a small overview over currently used technologies.
 
-| What                   | Technology                                      | Status    |
-| ---------------------- | ----------------------------------------------- | --------- |
-| DNS Provider           | DigitalOcean (automated with External-DNS)      | Done      |
-| OS (Intel NUC)         | Red Hat 8                                       | Done      |
-| Distributon            | Rancher (RKE2)                                  | Done      |
-| CRI                    | containerd (included in RKE2)                   | Done      |
-| CNI                    | Cilium                                          | Done      |
-| CSI                    | NFS SubDir External Provisioner                 | Done      |
-| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge) | Done      |
-| Ingress Controller     | Nginx                                           | Done      |
-| Control Plane          | Rancher 2.6                                     | Done      |
-| Control Plane Backup   | Rancher Backups                                 | Done      |
-| Monitoring             | Prometheus Stack via Rancher Monitoring         | Done      |
-| Persistent Data Backup | Kanister                                        | On hold * |
-| App Deployment         | Helm & Fleet                                    | Done      |
-| Logging                | Grafana Loki (via Rancher Logging)              | On hold * |
-| Container Registry     | Harbor                                          | On hold * |
+| What                   | Technology                                        | Status     |
+| ---------------------- | ------------------------------------------------- | ---------- |
+| DNS Provider           | DigitalOcean (automated with External-DNS)        | Done       |
+| OS (Intel NUC)         | Red Hat 8                                         | Done       |
+| Distributon            | Rancher (RKE2)                                    | Done       |
+| CRI                    | containerd (included in RKE2)                     | Done       |
+| CNI                    | Cilium                                            | Done       |
+| CSI                    | NFS SubDir External Provisioner                   | Done       |
+| Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge)   | Done       |
+| Ingress Controller     | Nginx                                             | Done       |
+| Control Plane          | Rancher 2.6                                       | Done       |
+| Control Plane Backup   | Rancher Backups                                   | Done       |
+| Monitoring             | Prometheus Stack via Rancher Monitoring           | Done       |
+| Rancher Logging        | Banzai Cloud Logging Operator via Rancher Logging | ToDo       |
+| Container Registry     | Harbor                                            | Done       |
+| Persistent Data Backup | Kanister                                          | On hold *  |
+| Logging                | Grafana Loki (via Rancher Logging)                | On hold *  |
+| App Deployment         | Helm & Fleet                                      | Deprecated |
 
 `*` On hold since this feature is currently not needed.
 
@@ -73,14 +74,19 @@ The technologies down here will probably change in the future. Nevertheless, the
       - [Cilium & Nginx Ingress Monitoring](#cilium--nginx-ingress-monitoring)
       - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
       - [Custom Nginx Ingress & Cluster Capacity Management Dashboard](#custom-nginx-ingress--cluster-capacity-management-dashboard)
-  - [Logging with Loki](#logging-with-loki)
+  - [Grafana Loki Logging Backend](#grafana-loki-logging-backend)
+    - [Rancher Logging](#rancher-logging)
   - [Kanister Backup & Restore](#kanister-backup--restore)
+- [Application Components](#application-components)
+  - [Harbor Registry](#harbor-registry)
+    - [Harbor Registry Prerequisites](#harbor-registry-prerequisites)
+    - [Rancher Installation](#rancher-installation-1)
+- [Deprecated Sections](#deprecated-sections)
   - [GitOps using Fleet](#gitops-using-fleet)
     - [Fleet Installation](#fleet-installation)
     - [Fleet Configuration](#fleet-configuration)
-- [Application Components](#application-components)
-  - [Minio Object Storage](#minio-object-storage)
-  - [Harbor Registry](#harbor-registry)
+  - [Application Component Deployments using Fleet](#application-component-deployments-using-fleet)
+    - [Minio Object Storage](#minio-object-storage)
 
 # Hardware
 One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS service from DigitalOcean.
@@ -928,11 +934,97 @@ kubectl apply -f manifests/nginx-dashboard.yaml
 kubectl apply -f manifests/capacity-monitoring-dashboard.yaml
 ```
 
-## Logging with Loki
+## Grafana Loki Logging Backend
+TODO
+
+### Rancher Logging
 TODO
 
 ## Kanister Backup & Restore
 TODO
+
+# Application Components
+
+## Harbor Registry
+
+### Harbor Registry Prerequisites
+Prepare & add the Helm chart repo:
+
+```bash
+mkdir ~/rke2/harbor
+helm repo add harbor https://helm.goharbor.io
+helm repo update
+```
+
+### Rancher Installation
+Create a `values.yaml` file with the following configuration:
+```yaml
+expose:
+  tls:
+    certSource: secret
+    secret:
+      secretName: "tls-harbor-cert"
+      notarySecretName: "tls-notary-cert"
+  ingress:
+    hosts:
+      core: registry.example.com
+      notary: notary.example.com
+    annotations:
+      cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
+
+externalURL: https://registry.example.com
+
+internalTLS:
+  enabled: true
+
+persistence:
+  persistentVolumeClaim:
+    registry:
+      size: 100Gi
+    chartmuseum:
+      size: 20Gi
+    jobservice:
+      size: 5Gi
+    database:
+      size: 5Gi
+    redis:
+      size: 5Gi
+    trivy:
+      size: 5Gi
+
+# The initial password of Harbor admin. Change it from portal after launching Harbor
+harborAdminPassword: "secure long password here"
+
+# The secret key used for encryption. Must be a string of 16 chars.
+secretKey: "secure long secret here"
+
+registry:
+  credentials:
+    password: "secure long password here"
+
+database:
+  internal:
+    password: "secure long password here"
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+```
+
+Finally, install the External-DNS helm chart:
+```bash
+helm upgrade -i --create-namespace --atomic harbor harbor/harbor \
+  --version v1.8.1 \
+  --namespace harbor \
+  -f values.yaml
+```
+
+Verification:
+![Harbor Web UI with valid certificate](images/harbor.png)
+
+# Deprecated Sections
+This chapter will contain sections which were once installed but never really used. Because of that, I won't update them anymore.
 
 ## GitOps using Fleet
 I first wanted to use ArgoCD to deploy applications with the GitOps approach on the K8s cluster, but then I realized, Rancher 2.5+ already comes with Fleet preinstalled and that it also offers a quite nice UI integration. I therefore chose to give Fleet a try.
@@ -1008,13 +1100,13 @@ kubectl apply -f home-lab-fleet-manifests.yaml
 Sources:
 - https://fleet.rancher.io/gitrepo-add/
 
-# Application Components
+## Application Component Deployments using Fleet
 Deployed via GitOps (Fleet).
 
 Sources:
 - https://fleet.rancher.io/gitrepo-structure/
 
-## Minio Object Storage
+### Minio Object Storage
 Create a `minio/fleet.yaml` file inside the `home-lab-fleet-manifests` Git repository:
 
 ```yaml
@@ -1068,6 +1160,3 @@ Sources:
 - https://github.com/minio/charts
 - https://github.com/minio/charts#existing-secret
 - https://github.com/rancher/fleet-examples/blob/c6e54d7a56565e52a63de8a2088997b46253c1fb/single-cluster/helm-multi-chart/rancher-monitoring/fleet.yaml#L6
-
-## Harbor Registry
-TODO

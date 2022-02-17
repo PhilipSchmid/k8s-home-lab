@@ -47,6 +47,7 @@ The technologies down here will probably change in the future. Nevertheless, the
     - [Prevent RKE2 Package Updates](#prevent-rke2-package-updates)
   - [Starting RKE2](#starting-rke2)
   - [Configure Kubectl (on RKE2 Host)](#configure-kubectl-on-rke2-host)
+  - [Troubleshooting RKE2](#troubleshooting-rke2)
 - [Basic Infrastructure Components](#basic-infrastructure-components)
   - [Networking using Cilium (CNI)](#networking-using-cilium-cni)
     - [Cilium Prerequisites](#cilium-prerequisites)
@@ -322,11 +323,37 @@ NAME                    STATUS     ROLES                       AGE   VERSION
 node1.example.com       NotReady   control-plane,etcd,master   50s   v1.21.8+rke2r1
 ```
 
-Troubleshooting RKE2 containers (locally on a RKE2 server node):
+## Troubleshooting RKE2
+Show RKE2 containers (locally on a RKE2 node):
 ```bash
 /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps
 /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-name>
 ```
+
+Show RKE2 nodes (locally on a RKE2 server node):
+```bash
+/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes
+```
+
+Show status uf RKE2 related services:
+```bash
+# On all RKE2 nodes:
+systemctl status rancher-system-agent
+# On server node:
+systemctl status rke2-server
+journalctl -fu rke2-server
+# On worker node:
+systemctl status rke2-agent
+journalctl -fu rke2-agent
+```
+
+Important RKE2 (log) files:
+- Static RKE2 pods: `/var/lib/rancher/rke2/agent/pod-manifests/*`
+- `HelmChart` / `HelmChartConfig` CRs on RKE2 servers: `/var/lib/rancher/rke2/server/manifests/*`
+- Kubelet log: `/var/lib/rancher/rke2/agent/logs/kubelet.log`
+- Containerd Config TOML: `/var/lib/rancher/rke2/agent/etc/containerd/config.toml`
+- Containerd log: `/var/lib/rancher/rke2/agent/containerd/containerd.log`
+- Rancher System Agent Config: `/etc/rancher/agent/config.yaml`
 
 # Basic Infrastructure Components
 

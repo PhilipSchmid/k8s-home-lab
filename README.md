@@ -1046,7 +1046,7 @@ metrics:
     enabled: true
 ```
 
-Finally, install the External-DNS helm chart:
+Finally, install the Harbor helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic harbor harbor/harbor \
   --version v1.8.1 \

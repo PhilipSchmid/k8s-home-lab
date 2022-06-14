@@ -23,6 +23,10 @@ The technologies down here will probably change in the future. Nevertheless, the
 | Monitoring             | Prometheus Stack via Rancher Monitoring           | Done       |
 | Rancher Logging        | Banzai Cloud Logging Operator via Rancher Logging | ToDo       |
 | Container Registry     | Harbor                                            | Done       |
+| Workload Visibility    | Pixie                                             | ToDo       |
+| Policy Enforcement     | OPA Gatekeeper                                    | ToDo       |
+| Runtime Enforcement    | Tetragon                                          | ToDo       |
+| Runtime Isolation      | gVisor                                            | ToDo       |
 | Persistent Data Backup | Kanister                                          | On hold *  |
 | Logging                | Grafana Loki (via Rancher Logging)                | On hold *  |
 | App Deployment         | Helm & Fleet                                      | Deprecated |

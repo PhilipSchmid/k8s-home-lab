@@ -236,12 +236,12 @@ kube-apiserver-extra-mount:
 **Please note:**
 - I set `disable-kube-proxy` to `true` and `cni` to `none`, since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards!
 - I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste (Daemonset in host network namespace).
-- As [PSPs](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecuritypolicy) will be [removed in K8s 1.25](https://kubernetes.io/blog/2021/04/06/podsecuritypolicy-deprecation-past-present-and-future/), we already switch away from PSP to [PSA](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecurity) by configuring the regarding admission controller plugin (`PodSecurity`). The RKE2 default value for the `enable-admission-plugins` flag can be seen [here](https://github.com/rancher/rke2/blob/master/pkg/cli/defaults/defaults.go#L31).
-- Please be aware that you'll need this same configuration on every single master node when you set up a multi-node cluster.
+- As [PSPs](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecuritypolicy) will be [removed in K8s 1.25](https://kubernetes.io/blog/2021/04/06/podsecuritypolicy-deprecation-past-present-and-future/), we don't even want to start with PSP anymore and instead directly start using [PSA](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecurity) by configuring the regarding admission controller plugin (`PodSecurity`). The RKE2 default value for the `enable-admission-plugins` flag can be seen [here](https://github.com/rancher/rke2/blob/master/pkg/cli/defaults/defaults.go#L31).
+- Please be aware that you'll need this same configuration on every single master node when you set up a multi-node cluster. In such a case, you additionally need to configure `token` and `server` (more details in the official [RKE2 server configuration reference](https://docs.rke2.io/install/install_options/server_config/)).
 
-Next, as we go the way with PSA, we need to define a default `AdmissionConfiguration` which specifies the default PodSecurity policies for all namespaces.
+Next, as we want to use PSA, we need to define a default `AdmissionConfiguration` which specifies the default PodSecurityStandard (PSS) policy for all namespaces.
 
-Create a file called `cluster-default-pss-config.yaml` inside the path `/etc/rancher/rke2/pss`) and add the following content:
+Create a file called `cluster-default-pss-config.yaml` inside the path `/etc/rancher/rke2/pss` and add the following content:
 ```yaml
 apiVersion: apiserver.config.k8s.io/v1
 kind: AdmissionConfiguration
@@ -264,7 +264,7 @@ plugins:
       - kube-system
 ```
 
-This functions as a default configuration and can be overridden on namespace level. To do so you simply need to specify more "loose" PodSecurityStandards (`privileged`) via labels on the namespace resources. Example for `demobackend`:
+This functions as a default configuration and can be overridden on namespace level. To do so, you simply need to specify the less restrictive PodSecurityStandard (`privileged`) via labels on the namespace resources. Here an example for `demobackend`:
 ```bash
 kubectl label namespace demobackend pod-security.kubernetes.io/enforce=privileged
 kubectl label namespace demobackend pod-security.kubernetes.io/enforce-version=v1.23
@@ -274,9 +274,9 @@ kubectl label namespace demobackend pod-security.kubernetes.io/warn=privileged
 kubectl label namespace demobackend pod-security.kubernetes.io/warn-version=v1.23
 ```
 
-**Important:** Please be aware that setting a Namespaces' PSS policy to `privileged` basically means its workload can do anything without any restriction! For that reason, it's absolutely key to only configure this level when there is really no other option - especially in production. Also, I would highly recommend you to also deploy OPA Gatekeeper in addition to PSA to enforce [custom constraints](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library) and therefore restrict various dangerous configurations.
+**Important:** Please be aware that setting a Namespaces' PSS policy to `privileged` basically means its workload can do anything without any restriction! For that reason, it's absolutely key to only configure this policy when there is really no other option - especially in production. Also, I would highly recommend you to also deploy OPA Gatekeeper in addition to PSA to enforce [custom constraints](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library) and therefore restrict various dangerous configurations.
 
-Testing PSS enforcement once the `rke2-server` service is started and the cluster is up & running (not yet, for later):
+Verification: Testing PSS enforcement once the `rke2-server` service is started and the cluster is up & running (not yet, for later):
 ```bash
 $ echo 'apiVersion: v1
 > kind: Pod
@@ -966,9 +966,9 @@ Verification:
 ![Rancher Backup Job](images/rancher-backup-job.png)
 
 ### Rancher Monitoring
-Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use it this way.
+Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use this one instead of using the upstream kube-prometheus-stack Helm chart.
 
-As Rancher Monitoring needs to advanced privileges regarding PSS policy, it can't comply with our default PSS policy `baseline`. We therefore create the main Rancher Monitoring namespace (`cattle-monitoring-system`) before installing the actual App (Helm chart) so we are able to already set its PSS policy to `privileged`:
+As Rancher Monitoring needs advanced privileges regarding the PSS policy, it can't comply with our default PSS policy `baseline`. We therefore create the main Rancher Monitoring namespace (`cattle-monitoring-system`) before installing the actual App (Helm chart) so we are able to already set its PSS policy to `privileged`:
 
 ```bash
 kubectl create namespace cattle-monitoring-system

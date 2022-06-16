@@ -226,9 +226,79 @@ kubelet-arg:
 - "eviction-soft-grace-period=memory.available=2m"
 - "kube-reserved=cpu=200m,memory=500Mi"
 - "system-reserved=cpu=200m,memory=500Mi"
+kube-apiserver-arg:
+- "--enable-admission-plugins=NodeRestriction,PodSecurity"
+- "--admission-control-config-file=/etc/kubernetes/pss/cluster-default-pss-config.yaml"
+kube-apiserver-extra-mount:
+- "/etc/rancher/rke2/pss:/etc/kubernetes/pss"
 ```
 
-**Note:** I set `disable-kube-proxy` to `true` and `cni` to `none`, since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards! I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste (Daemonset in host network namespace). Please also note that you'll need this same configuration on every single master node when you set up a multi-node cluster.
+**Please note:**
+- I set `disable-kube-proxy` to `true` and `cni` to `none`, since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards!
+- I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste (Daemonset in host network namespace).
+- As [PSPs](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecuritypolicy) will be [removed in K8s 1.25](https://kubernetes.io/blog/2021/04/06/podsecuritypolicy-deprecation-past-present-and-future/), we already switch away from PSP to [PSA](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecurity) by configuring the regarding admission controller plugin (`PodSecurity`). The RKE2 default value for the `enable-admission-plugins` flag can be seen [here](https://github.com/rancher/rke2/blob/master/pkg/cli/defaults/defaults.go#L31).
+- Please be aware that you'll need this same configuration on every single master node when you set up a multi-node cluster.
+
+Next, as we go the way with PSA, we need to define a default `AdmissionConfiguration` which specifies the default PodSecurity policies for all namespaces.
+
+Create a file called `cluster-default-pss-config.yaml` inside the path `/etc/rancher/rke2/pss`) and add the following content:
+```yaml
+apiVersion: apiserver.config.k8s.io/v1
+kind: AdmissionConfiguration
+plugins:
+- name: PodSecurity
+  configuration:
+    apiVersion: pod-security.admission.config.k8s.io/v1beta1
+    kind: PodSecurityConfiguration
+    defaults:
+      enforce: "baseline"
+      enforce-version: "v1.23"
+      audit: "baseline"
+      audit-version: "v1.23"
+      warn: "baseline"
+      warn-version: "v1.23"
+    exemptions:
+      usernames: []
+      runtimeClasses: []
+      namespaces:
+      - kube-system
+```
+
+This functions as a default configuration and can be overridden on namespace level. To do so you simply need to specify more "loose" PodSecurityStandards (`privileged`) via labels on the namespace resources. Example for `demobackend`:
+```bash
+kubectl label namespace demobackend pod-security.kubernetes.io/enforce=privileged
+kubectl label namespace demobackend pod-security.kubernetes.io/enforce-version=v1.23
+kubectl label namespace demobackend pod-security.kubernetes.io/audit=privileged
+kubectl label namespace demobackend pod-security.kubernetes.io/audit-version=v1.23
+kubectl label namespace demobackend pod-security.kubernetes.io/warn=privileged
+kubectl label namespace demobackend pod-security.kubernetes.io/warn-version=v1.23
+```
+
+**Important:** Please be aware that setting a Namespaces' PSS policy to `privileged` basically means its workload can do anything without any restriction! For that reason, it's absolutely key to only configure this level when there is really no other option - especially in production. Also, I would highly recommend you to also deploy OPA Gatekeeper in addition to PSA to enforce [custom constraints](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library) and therefore restrict various dangerous configurations.
+
+Testing PSS enforcement once the `rke2-server` service is started and the cluster is up & running (not yet, for later):
+```bash
+$ echo 'apiVersion: v1
+> kind: Pod
+> metadata:
+>   name: tshoot
+> spec:
+>   containers:
+>   - args:
+>     - "sleep 3600"
+>     image: ghcr.io/philipschmid/tshoot:latest
+>     name: tshoot
+>     securityContext:
+>       capabilities:
+>         add: ["NET_ADMIN", "SYS_TIME"]
+> ' | k apply -f-
+Error from server (Forbidden): error when creating "STDIN": pods "tshoot" is forbidden: violates PodSecurity "baseline:v1.23": non-default capabilities (container "tshoot" must not include "NET_ADMIN", "SYS_TIME" in securityContext.capabilities.add)
+```
+
+Sources:
+- https://kubernetes.io/docs/tutorials/security/cluster-level-pss/
+- https://kubernetes.io/docs/concepts/security/pod-security-standards/
+- https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/
 
 ### Firewall
 Ensure to open the required ports:
@@ -422,7 +492,6 @@ hubble:
 
   ui:
     enabled: true
-    replicas: 1
     ingress:
       enabled: true
       hosts:
@@ -591,6 +660,18 @@ controller:
 
   admissionWebhooks:
     enabled: false
+```
+
+As our Nginx ingress controller runs in host namespace and uses host ports, it can't comply with our default PSS policy `baseline`. We therefore create the namespace before installing the actual Helm chart so we are able to already set its PSS policy to `privileged`:
+
+```bash
+kubectl create namespace ingress-nginx
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/enforce=privileged
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/enforce-version=v1.23
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/audit=privileged
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/audit-version=v1.23
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/warn=privileged
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/warn-version=v1.23
 ```
 
 Finally, install the Nginx ingress controller helm chart:
@@ -886,6 +967,18 @@ Verification:
 
 ### Rancher Monitoring
 Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use it this way.
+
+As Rancher Monitoring needs to advanced privileges regarding PSS policy, it can't comply with our default PSS policy `baseline`. We therefore create the main Rancher Monitoring namespace (`cattle-monitoring-system`) before installing the actual App (Helm chart) so we are able to already set its PSS policy to `privileged`:
+
+```bash
+kubectl create namespace cattle-monitoring-system
+kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/enforce=privileged
+kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/enforce-version=v1.23
+kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/audit=privileged
+kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/audit-version=v1.23
+kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/warn=privileged
+kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/warn-version=v1.23
+```
 
 Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "Monitoring" chart. Leave nearly all settings default but enable persistent storage for Prometheus:
 

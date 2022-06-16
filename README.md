@@ -70,7 +70,7 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [External-DNS](#external-dns)
     - [External-DNS Prerequisites](#external-dns-prerequisites)
     - [External-DNS Installation](#external-dns-installation)
-  - [Rancher (2.6.X)](#rancher-26x)
+  - [Rancher (2.6.5)](#rancher-265)
     - [Rancher Prerequisites](#rancher-prerequisites)
     - [Rancher Installation](#rancher-installation)
     - [Rancher Backups](#rancher-backups)
@@ -124,7 +124,7 @@ Install `kubectl`, `helm` and RKE2 to the host system:
 BINARY_DIR="/usr/local/bin"
 cd /tmp
 # Helm
-wget https://get.helm.sh/helm-v3.7.1-linux-amd64.tar.gz
+wget https://get.helm.sh/helm-v3.9.0-linux-amd64.tar.gz
 tar -zxvf helm-*-linux-amd64.tar.gz
 sudo mv linux-amd64/helm $BINARY_DIR/helm
 sudo chmod +x $BINARY_DIR/helm
@@ -137,27 +137,27 @@ echo 'alias k="kubectl"' >>~/.bashrc
 echo 'alias kgp="kubectl get pods"' >>~/.bashrc
 echo 'alias kgn="kubectl get nodes"' >>~/.bashrc
 echo 'alias kga="kubectl get all -A"' >>~/.bashrc
+echo 'alias fpods="kubectl get pods -A -o wide | grep -v 1/1 | grep -v 2/2 | grep -v 3/3 | grep -v 4/4 | grep -v 5/5 | grep -v 6/6 | grep -v 7/7 | grep -v Completed"' >>~/.bashrc
 echo 'source <(kubectl completion bash)' >>~/.bashrc
 echo 'complete -F __start_kubectl k' >>~/.bashrc
 source ~/.bashrc
 # RKE2
-curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_CHANNEL=v1.21 sh -
+curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_CHANNEL=v1.23 sh -
 ```
-
-**Note:** `INSTALL_RKE2_CHANNEL` is currently required to be set to `v1.21` version as [Rancher 2.6.3](https://github.com/rancher/rancher/releases/tag/v2.6.3) currently does not support K8s 1.22 and newer!
 
 Verification:
 ```
 # Helm
 $ helm version
-version.BuildInfo{Version:"v3.7.1", GitCommit:"1d11fcb5d3f3bf00dbe6fe31b8412839a96b3dc4", GitTreeState:"clean", GoVersion:"go1.16.9"}
+version.BuildInfo{Version:"v3.9.0", GitCommit:"7ceeda6c585217a19a1131663d8cd1f7d641b2a7", GitTreeState:"clean", GoVersion:"go1.17.5"}
 # Kubectl
 $ kubectl version --client=true
-Client Version: version.Info{Major:"1", Minor:"22", GitVersion:"v1.22.2", GitCommit:"8b5a19147530eaac9476b0ab82980b4088bbc1b2", GitTreeState:"clean", BuildDate:"2021-09-15T21:38:50Z", GoVersion:"go1.16.8", Compiler:"gc", Platform:"linux/amd64"}
+Client Version: version.Info{Major:"1", Minor:"24", GitVersion:"v1.24.1", GitCommit:"3ddd0f45aa91e2f30c70734b175631bec5b5825a", GitTreeState:"clean", BuildDate:"2022-05-24T12:26:19Z", GoVersion:"go1.18.2", Compiler:"gc", Platform:"linux/amd64"}
+Kustomize Version: v4.5.4
 # RKE2
 $ rke2 --version
-rke2 version v1.21.8+rke2r1 (68d5b68526361fd050a861fc07126a30980b897e)
-go version go1.16.10b7
+rke2 version v1.23.7+rke2r2 (d0c2bd7f1dbd30f5b7bbc2e3c899d2efde979c25)
+go version go1.17.5b7
 ```
 
 Optional: Install `kubectl` plugins `kubens` and `kubectx` via [krew](https://krew.sigs.k8s.io/):
@@ -177,6 +177,7 @@ echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >>~/.bashrc
 kubectl krew install ctx
 kubectl krew install ns
 # Install fzf to use kubens and kubectx in interactive mode
+sudo dnf install git
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install
 # Add aliases to bashrc
@@ -209,7 +210,8 @@ tls-san:
 etcd-snapshot-schedule-cron: " */2 * * *"
 # Keep 56 etcd snapshorts (equals to 2 weeks with 6 a day)
 etcd-snapshot-retention: 56
-cni: "none"
+cni:
+- none
 disable-kube-proxy: "true"
 cluster-cidr: "100.64.0.0/14"
 service-cidr: "100.68.0.0/16"
@@ -292,9 +294,9 @@ exclude=rke2-*
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```
 $ sudo rpm -qa "*rke2*"
-rke2-server-1.21.8~rke2r1-0.el8.x86_64
+rke2-common-1.23.7~rke2r2-0.el8.x86_64
 rke2-selinux-0.9-1.el8.noarch
-rke2-common-1.21.8~rke2r1-0.el8.x86_64
+rke2-server-1.23.7~rke2r2-0.el8.x86_64
 ```
 
 Sources:
@@ -323,8 +325,8 @@ chmod 600 ~/.kube/config
 Verification:
 ```
 $ kubectl get nodes
-NAME                    STATUS     ROLES                       AGE   VERSION
-node1.example.com       NotReady   control-plane,etcd,master   50s   v1.21.8+rke2r1
+NAME                    STATUS     ROLES                       AGE    VERSION
+node1.example.com       NotReady   control-plane,etcd,master   101s   v1.23.7+rke2r2
 ```
 
 ## Troubleshooting RKE2
@@ -435,9 +437,6 @@ hubble:
   relay:
     enabled: true
 
-ipv6:
-  enabled: true
-
 # Since we only have 1 node, we only need 1 replica:
 operator:
   replicas: 1
@@ -466,15 +465,38 @@ prometheus:
 Finally install the Cilium helm chart:
 ```bash
 helm upgrade -i --atomic cilium cilium/cilium \
-  --version 1.11.0 \
+  --version 1.11.6 \
   --namespace kube-system \
   -f values.yaml
+```
+
+**Hint**: When upgrading from an older Cilium version, it's recommended to run the pre-flight check first:
+```bash
+helm template cilium/cilium --version 1.11.6 \
+  --namespace=kube-system \
+  --set preflight.enabled=true \
+  --set agent=false \
+  --set operator.enabled=false \
+  --set k8sServiceHost=<node-ip-of-node-where-kube-apiserver-is-running> \
+  --set k8sServicePort=6443 \
+  > cilium-preflight.yaml
+kubectl create -f cilium-preflight.yaml
+```
+
+If all pods of this check are up and running, you can clean it up and run the actual `helm upgrade` command from above. Pre-flight status and cleanup:
+```bash
+# Check if all replicas are up and ready:
+kubectl get daemonset -n kube-system | sed -n '1p;/cilium/p'
+kubectl get deployment -n kube-system cilium-pre-flight-check -w
+# Cleanup:
+kubectl delete -f cilium-preflight.yaml
 ```
 
 Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
 - https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/
+- https://docs.cilium.io/en/stable/operations/upgrade/#running-pre-flight-check-required
 
 ## Persistent Storage using NFS-SubDir-External-Provisioner
 Used to provide persistent storage via NFS from the Synology NAS. It creates subdirectories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).
@@ -488,6 +510,11 @@ Prepare & add the Helm chart repo:
 mkdir ~/rke2/nfs-subdir-external-provisioner
 helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
 helm repo update
+```
+
+Ensure the nfs protocol is known to the host system:
+```bash
+sudo dnf install nfs-utils
 ```
 
 ### NFS-SubDir-External-Provisioner Installation
@@ -507,7 +534,7 @@ storageClass:
 Finally, install the NFS SubDir external provisioner helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
-  --version 4.0.14 \
+  --version 4.0.16 \
   --namespace nfs-subdir-provisioner \
   -f values.yaml
 ```
@@ -536,6 +563,14 @@ controller:
   hostNetwork: true
   kind: "DaemonSet"
 
+  # Make use of the IngressClass concept
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: true
+    controllerValue: "k8s.io/ingress-nginx"
+  ingressClass: nginx
+  # ... nevertheless, still watch of Ingress resources which do not have the spec.ingressClassName field set:
   watchIngressWithoutClass: true
 
   publishService:
@@ -550,9 +585,6 @@ controller:
     # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
     #serviceMonitor:
     #  enabled: true
-    
-  podSecurityPolicy:
-    enabled: true
 
   serviceAccount:
     create: true
@@ -564,7 +596,7 @@ controller:
 Finally, install the Nginx ingress controller helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
-  --version 4.0.13 \
+  --version 4.1.4 \
   --namespace ingress-nginx \
   -f values.yaml
 ```
@@ -589,7 +621,7 @@ Install the Cert-Manager controller helm chart:
 helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
   --namespace cert-manager \
   --set installCRDs=true \
-  --version v1.6.1
+  --version v1.8.1
 ```
 
 Verification:
@@ -620,8 +652,8 @@ kind: Secret
 metadata:
   name: digitalocean-dns
   namespace: cert-manager
-data:
-  access-token: "base64 encoded access-token here"
+stringData:
+  access-token: "plaintext access-token here"
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -663,6 +695,14 @@ Apply the `lets-encrypt-dns01-do.yaml` manifest:
 kubectl apply -f lets-encrypt-dns01-do.yaml
 ```
 
+Verification:
+```bash
+$ k get clusterissuer
+NAME                               READY   AGE
+lets-encrypt-dns01-production-do   True    3m51s
+lets-encrypt-dns01-staging-do      True    3m51s
+```
+
 Sources:
 - https://cert-manager.io/docs/configuration/acme/dns01/
 - https://cert-manager.io/docs/configuration/acme/dns01/digitalocean/
@@ -696,7 +736,7 @@ digitalocean:
 Finally, install the External-DNS helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
-  --version 6.0.2 \
+  --version 6.5.6 \
   --namespace external-dns \
   -f values.yaml
 ```
@@ -706,7 +746,7 @@ Verification:
 kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
 ```
 
-## Rancher (2.6.X)
+## Rancher (2.6.5)
 
 Sources:
 - https://rancher.com/docs/rancher/v2.6/en/installation/install-rancher-on-k8s/
@@ -761,12 +801,13 @@ ingress:
 replicas: 1
 auditLog:
   level: 1
+bootstrapPassword: <super-secret-generated-password-here>
 ```
 
 Finally, install the Rancher helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
-  --version 2.6.3 \
+  --version 2.6.5 \
   --namespace cattle-system \
   -f values.yaml
 ```
@@ -858,6 +899,8 @@ rke2Proxy:
 ```
 (We simply can't use the kube-proxy metrics target since we disabled it completely ("kube-proxy less" Cilium).)
 
+Also remove the whole `rke2IngressNginx.client.affinity` section as we run everything on a single node.
+
 Finally, click "Install" and wait a few minutes.
 
 **Note:** If you run into a `StorageClass "nfs": claim Selector is not supported` issue (shown as event on the Prometheus PVC), try to manually remove the empty `selector` section from `prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec`, delete the PVC and re-run the Rancher Monitoring installation (see [issues/29755](https://github.com/rancher/rancher/issues/29755#issuecomment-717997959) for more information).
@@ -904,57 +947,37 @@ controller:
 #### Cilium Grafana Dashboards
 There are currently 3 public available Grafana Dashboards from Cilium:
 
-- [Cilium v1.9 Agent Metrics](https://grafana.com/grafana/dashboards/13537)
-- [Cilium v1.9 Hubble Metrics](https://grafana.com/grafana/dashboards/13539)
-- [Cilium v1.9 Operator Metrics](https://grafana.com/grafana/dashboards/13538)
+- [Cilium v1.11 Agent Metrics](https://grafana.com/grafana/dashboards/15513)
+- [Cilium v1.11 Hubble Metrics](https://grafana.com/grafana/dashboards/15515)
+- [Cilium v1.11 Operator Metrics](https://grafana.com/grafana/dashboards/15514)
 
-Create a ConfigMap (`grafana-cilium-dashboards-cm.yaml`) with the following content and replace the `...` placeholders with the regarding dashboard JSONs from the links above:
-```yaml
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    grafana_dashboard: "1"
-  name: grafana-cilium-agent-metrics-cm
-  namespace: cattle-dashboards
-data:
-  cilium-agent-metrics.json: |-
-    ...
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    grafana_dashboard: "1"
-  name: grafana-cilium-hubble-metrics-cm
-  namespace: cattle-dashboards
-data:
-  cilium-hubble-metrics.json: |-
-    ...
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    grafana_dashboard: "1"
-  name: grafana-cilium-operator-metrics-cm
-  namespace: cattle-dashboards
-data:
-  cilium-operator-metrics.json: |-
-    ...
+Download the JSONs, replace the default datasource `${DS_PROMETHEUS}` to `Prometheus` and create ConfigMaps from them:
+```bash
+sed -i 's/${DS_PROMETHEUS}/Prometheus/g' cilium-agent-metrics.json
+sed -i 's/${DS_PROMETHEUS}/Prometheus/g' cilium-hubble-metrics.json
+sed -i 's/${DS_PROMETHEUS}/Prometheus/g' cilium-operator-metrics.json
+kubectl create configmap -n cattle-dashboards grafana-cilium-agent-metrics-cm --from-file=cilium-agent-metrics.json=cilium-agent-metrics.json
+kubectl create configmap -n cattle-dashboards grafana-cilium-hubble-metrics-cm --from-file=cilium-hubble-metrics.json=cilium-hubble-metrics.json
+kubectl create configmap -n cattle-dashboards grafana-cilium-operator-metrics-cm --from-file=cilium-operator-metrics.json=cilium-operator-metrics.json
 ```
 
-**Note**: The Grafana dashboards did not work right away. I needed to remove all `k8s_app=\"cilium\"`/`{io_cilium_app=\"operator\"}` constraints and I also needed to add `DS_PROMETHEUS` `templating` `list` objects. If you run into the same issues, just use the provided `manifests/grafana-cilium-dashboards-cm.yaml` manifest:
+Next, label the dashboard JSONs so Grafana takes them up:
+```bash
+kubectl label configmap -n cattle-dashboards grafana-cilium-agent-metrics-cm grafana_dashboard=1
+kubectl label configmap -n cattle-dashboards grafana-cilium-hubble-metrics-cm grafana_dashboard=1
+kubectl label configmap -n cattle-dashboards grafana-cilium-operator-metrics-cm grafana_dashboard=1
+```
+
+Finally, restart the Grafana pod so the newly created Cilium dashboards:
 
 ```bash
-kubectl apply -f grafana-cilium-dashboards-cm.yaml
+kubectl rollout restart deployment -n cattle-monitoring-system rancher-monitoring-grafana
 ```
 
-![Cilium v1.9 Agent Metrics Grafana Dashboard](images/cilium-agent-metrics-grafana.png)
+![Cilium v1.11 Agent Metrics Grafana Dashboard](images/cilium-agent-metrics-grafana.png)
 
 Sources:
-- https://rancher.com/docs/rancher/v2.x/en/monitoring-alerting/v2.5/migrating/#migrating-grafana-dashboards
+- https://rancher.com/docs/rancher/v2.6/en/monitoring-alerting/
 
 #### Custom Nginx Ingress & Cluster Capacity Management Dashboard
 When installing the Prometheus stack, I also often deploy some other nice Grafana Dashboards like this one for the Nginx ingress:
@@ -1053,7 +1076,7 @@ metrics:
 Finally, install the Harbor helm chart:
 ```bash
 helm upgrade -i --create-namespace --atomic harbor harbor/harbor \
-  --version v1.8.1 \
+  --version v1.9.1 \
   --namespace harbor \
   -f values.yaml
 ```

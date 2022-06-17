@@ -1,6 +1,8 @@
 # Kubernetes in a Home Lab Environment
 This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
+As I will include more and more cloud native technologies in this guide, you should probably instead have a look at my ["Quick & Dirty, Copy & Paste, Single-Host Kubernetes Setup"](https://gist.github.com/PhilipSchmid/57ce0801fbe7b68f70b9b58e1e3225b3) guide in case you simply want to spin up a minimal local K8s cluster (with networking, ingress and storage) within a few minutes.
+
 In the end, I will probably run some applications on top of this technology stack, but the main goal is to strengthen my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready**, since the chaining of the different tools and their configurations has not been tested really well.
 
 ![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
@@ -23,10 +25,6 @@ The technologies down here will probably change in the future. Nevertheless, the
 | Monitoring             | Prometheus Stack via Rancher Monitoring           | Done       |
 | Rancher Logging        | Banzai Cloud Logging Operator via Rancher Logging | ToDo       |
 | Container Registry     | Harbor                                            | Done       |
-| Workload Visibility    | Pixie                                             | ToDo       |
-| Policy Enforcement     | OPA Gatekeeper                                    | ToDo       |
-| Runtime Enforcement    | Tetragon                                          | ToDo       |
-| Runtime Isolation      | gVisor                                            | ToDo       |
 | Persistent Data Backup | Kanister                                          | On hold *  |
 | Logging                | Grafana Loki (via Rancher Logging)                | On hold *  |
 | App Deployment         | Helm & Fleet                                      | Deprecated |

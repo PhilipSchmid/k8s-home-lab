@@ -23,10 +23,10 @@ The technologies down here will probably change in the future. Nevertheless, the
 | Control Plane          | Rancher 2.6                                       | Done       |
 | Control Plane Backup   | Rancher Backups                                   | Done       |
 | Monitoring             | Prometheus Stack via Rancher Monitoring           | Done       |
-| Rancher Logging        | Banzai Cloud Logging Operator via Rancher Logging | ToDo       |
+| Rancher Logging        | Banzai Cloud Logging Operator via Rancher Logging | Done       |
 | Container Registry     | Harbor                                            | Done       |
+| Logging                | Grafana Loki (via Rancher Logging)                | Done       |
 | Persistent Data Backup | Kanister                                          | On hold *  |
-| Logging                | Grafana Loki (via Rancher Logging)                | On hold *  |
 | App Deployment         | Helm & Fleet                                      | Deprecated |
 
 `*` On hold since this feature is currently not needed.
@@ -80,8 +80,14 @@ The technologies down here will probably change in the future. Nevertheless, the
       - [Cilium & Nginx Ingress Monitoring](#cilium--nginx-ingress-monitoring)
       - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
       - [Custom Nginx Ingress & Cluster Capacity Management Dashboard](#custom-nginx-ingress--cluster-capacity-management-dashboard)
-  - [Grafana Loki Logging Backend](#grafana-loki-logging-backend)
     - [Rancher Logging](#rancher-logging)
+      - [Configure ClusterOutput](#configure-clusteroutput)
+      - [Configure ClusterFlow](#configure-clusterflow)
+  - [Loki Logging Backend](#loki-logging-backend)
+    - [Loki Prerequisites](#loki-prerequisites)
+    - [Loki Installation](#loki-installation)
+    - [Add Loki Source to Grafana](#add-loki-source-to-grafana)
+      - [Explore logs](#explore-logs)
   - [Kanister Backup & Restore](#kanister-backup--restore)
 - [Application Components](#application-components)
   - [Harbor Registry](#harbor-registry)
@@ -530,7 +536,6 @@ operator:
   # Configure this prometheus section AFTER Rancher Monitoring is enabled!
   #prometheus:
   #  enabled: true
-  #  port: 6942
   #  serviceMonitor:
   #    enabled: true
 
@@ -1263,11 +1268,223 @@ kubectl apply -f manifests/nginx-dashboard.yaml
 kubectl apply -f manifests/capacity-monitoring-dashboard.yaml
 ```
 
-## Grafana Loki Logging Backend
-TODO
 
 ### Rancher Logging
-TODO
+Rancher Logging is capable to collect, filter and output logs to different logging backend like ElastiSearch, Splunk, Syslog, Loki, etc. It's based on the [BanzaiCloud Logging Operator](https://github.com/banzaicloud/logging-operator).
+
+**Important:** Implement the following SElinux workaround (if SElinux is enabled) as there is currently an open issue (see [here](https://github.com/rancher/rancher/issues/34387) and [here](https://github.com/rancher/charts/issues/1596)) related to a [wrongly used SElinux type](https://github.com/rancher/charts/blob/dev-v2.6/charts/rancher-logging/100.1.1%2Bup3.17.3/templates/loggings/rke2/daemonset.yaml#L26) (`rke_logreader_t`): https://github.com/rancher/charts/issues/1596#issuecomment-1122775136
+
+```bash
+sudo dnf -y install policycoreutils-devel
+cat <<EOF >> rke2_logging_bodge.te
+module rke2_logging_bodge 1.0;
+
+require {
+        type container_logreader_t;
+
+        type container_log_t;
+        type syslogd_var_run_t;
+        class lnk_file { read getattr };
+        class dir { read };
+}
+
+typealias container_logreader_t alias rke_logreader_t;
+
+allow container_logreader_t container_log_t:lnk_file { read getattr };
+allow container_logreader_t syslogd_var_run_t:dir { read };
+EOF
+make -f /usr/share/selinux/devel/Makefile rke2_logging_bodge.pp
+sudo semodule -i rke2_logging_bodge.pp
+```
+
+Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "Logging" chart. In the YAML editor, set the variable `global.seLinux.enabled` to `true` and the variable `monitoring.serviceMonitor.enabled` to `true`. Also reconfigure `fluentd.resources`. Configure the following values there, as the default memory limit is often not enough:
+
+```yaml
+fluentd:
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 100M
+```
+
+Finally, install it.
+
+#### Configure ClusterOutput
+The `ClusterOutput` defines a logging backend where fluentd and fluentbit can send logs to.
+
+Preparation:
+```bash
+mkdir ~/rke2/rancher-logging
+```
+
+Create the following YAML (`clusteroutput-loki.yaml`):
+```yaml
+apiVersion: logging.banzaicloud.io/v1beta1
+kind: ClusterOutput
+metadata:
+  name: loki
+  namespace: cattle-logging-system
+spec:
+  loki:
+    configure_kubernetes_labels: true
+    extract_kubernetes_labels: true
+    url: http://loki-stack.loki.svc.cluster.local:3100
+```
+
+Apply the just created YAML:
+```bash
+kubectl apply -f clusteroutput-loki.yaml
+```
+
+#### Configure ClusterFlow
+Flow defines a logging flow with filters and outputs. This means that it connects the filtered logs to the output where to send them.
+
+Create the following YAML (`clusterflow-loki.yaml`) to collect and send all logs to Loki:
+```yaml
+apiVersion: logging.banzaicloud.io/v1beta1
+kind: ClusterFlow
+metadata:
+  name: loki
+  namespace: cattle-logging-system
+spec:
+  globalOutputRefs:
+    - loki
+  match:
+    - select: {}
+```
+
+Apply the just created YAML:
+```bash
+kubectl apply -f clusterflow-loki.yaml
+```
+
+Sources:
+- https://rancher.com/docs/rancher/v2.6/en/logging/
+- https://rancher.com/docs/rancher/v2.6/en/logging/custom-resource-config/outputs/
+
+## Loki Logging Backend
+Loki is used to store container and platform logs received from Rancher Loggings' fluentd instance.
+
+Sources:
+- https://github.com/grafana/helm-charts/tree/main/charts/loki-stack
+- https://rancher.com/government/enhancing-your-rancher-monitoring-experience-with-grafana-loki
+- https://awesome-prometheus-alerts.grep.to/rules.html#loki-1
+
+### Loki Prerequisites
+Prepare & add the Helm chart repo:
+
+```bash
+mkdir ~/rke2/loki
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+```
+
+### Loki Installation
+Create a `values.yaml` file with the following configuration:
+```yaml
+promtail:
+  enabled: false
+
+loki:
+  enabled: true
+  rbac:
+    pspEnabled: false
+  persistence:
+    enabled: true
+    size: 20Gi
+  config:
+    compactor:
+      retention_enabled: true
+  serviceMonitor:
+    enabled: true
+    prometheusRule:
+      enabled: true
+      rules:
+      #Some examples from https://awesome-prometheus-alerts.grep.to/rules.html#loki
+      - alert: LokiProcessTooManyRestarts
+        expr: changes(process_start_time_seconds{job=~"loki"}[15m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Loki process too many restarts (instance {{ $labels.instance }})
+          description: "A loki process had too many restarts (target {{ $labels.instance }})\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+      - alert: LokiRequestErrors
+        expr: 100 * sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[1m])) by (namespace, job, route) / sum(rate(loki_request_duration_seconds_count[1m])) by (namespace, job, route) > 10
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: Loki request errors (instance {{ $labels.instance }})
+          description: "The {{ $labels.job }} and {{ $labels.route }} are experiencing errors\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+      - alert: LokiRequestPanic
+        expr: sum(increase(loki_panic_total[10m])) by (namespace, job) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Loki request panic (instance {{ $labels.instance }})
+          description: "The {{ $labels.job }} is experiencing {{ printf \"%.2f\" $value }}% increase of panics\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+      - alert: LokiRequestLatency
+        expr: (histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket{route!~"(?i).*tail.*"}[5m])) by (le)))  > 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Loki request latency (instance {{ $labels.instance }})
+          description: "The {{ $labels.job }} {{ $labels.route }} is experiencing {{ printf \"%.2f\" $value }}s 99th percentile latency\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+```
+
+Finally, install the Loki helm chart:
+```bash
+helm upgrade -i --create-namespace --atomic loki-stack grafana/loki-stack \
+  --version 2.6.4 \
+  --namespace loki \
+  -f values.yaml
+```
+
+### Add Loki Source to Grafana
+In order to add Loki as datasource in Grafana, simply create the following ConfigMap (`cm-loki-datasource.yaml`) inside the `cattle-monitoring-system` Namespace and ensure it has the label `grafana_datasource=1` set:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-loki-datasource
+  namespace: cattle-monitoring-system
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-stack-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki-stack.loki.svc.cluster.local:3100
+      version: 1
+```
+
+Finally apply it and restart Grafana to pick the source up:
+```bash
+# Apply:
+kubectl apply -f cm-loki-datasource.yaml
+# Grafana Pod restart:
+kubectl rollout restart -n cattle-monitoring-system deployment rancher-monitoring-grafana
+```
+
+#### Explore logs
+In Grafana, navigate to the "Explore" menu and in the top left corner change the datasource from "Prometheus" to "Loki".
+
+Paste the below query in the log browser to test if logs are visible.
+
+```json
+{app="prometheus"}
+```
+
+![Loki logs shown in Grafana Explore](images/TODO.png)
 
 ## Kanister Backup & Restore
 TODO

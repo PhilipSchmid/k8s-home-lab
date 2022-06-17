@@ -46,6 +46,8 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [RKE2 Setup](#rke2-setup)
     - [Basic Configuration](#basic-configuration)
     - [Firewall](#firewall)
+      - [Firewalld (and nftables)](#firewalld-and-nftables)
+      - [Cilium Host Policies](#cilium-host-policies)
     - [Prevent RKE2 Package Updates](#prevent-rke2-package-updates)
   - [Starting RKE2](#starting-rke2)
   - [Configure Kubectl (on RKE2 Host)](#configure-kubectl-on-rke2-host)
@@ -54,6 +56,7 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [Networking using Cilium (CNI)](#networking-using-cilium-cni)
     - [Cilium Prerequisites](#cilium-prerequisites)
     - [Cilium Installation](#cilium-installation)
+    - [Cilium Host Policies](#cilium-host-policies-1)
   - [Persistent Storage using NFS-SubDir-External-Provisioner](#persistent-storage-using-nfs-subdir-external-provisioner)
     - [NFS-SubDir-External-Provisioner Prerequisites](#nfs-subdir-external-provisioner-prerequisites)
     - [NFS-SubDir-External-Provisioner Installation](#nfs-subdir-external-provisioner-installation)
@@ -216,7 +219,7 @@ service-cidr: "100.68.0.0/16"
 cluster-dns: "100.68.0.10"
 selinux: "true"
 disable:
-  - rke2-ingress-nginx
+- rke2-ingress-nginx
 kubelet-arg:
 - "max-pods=100"
 - "eviction-hard=memory.available<250Mi"
@@ -299,33 +302,42 @@ Sources:
 - https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/
 
 ### Firewall
+
+#### Firewalld (and nftables)
 Ensure to open the required ports:
 ```bash
 ### RKE2 specific ports
-sudo firewall-cmd --add-port=9345/tcp --permanent
 sudo firewall-cmd --add-port=6443/tcp --permanent
 sudo firewall-cmd --add-port=10250/tcp --permanent
-sudo firewall-cmd --add-port=2379/tcp --permanent
-sudo firewall-cmd --add-port=2380/tcp --permanent
-sudo firewall-cmd --add-port=30000-32767/tcp --permanent
+# Only required when NodePort services are used:
+#sudo firewall-cmd --add-port=30000-32767/tcp --permanent
+# Only required in a multi-node cluster setup:
+#sudo firewall-cmd --add-port=2379/tcp --permanent
+#sudo firewall-cmd --add-port=2380/tcp --permanent
+#sudo firewall-cmd --add-port=9345/tcp --permanent
+
 # Used for the Rancher Monitoring
-sudo firewall-cmd --add-port=9796/tcp --permanent
 sudo firewall-cmd --add-port=9090/tcp --permanent
-sudo firewall-cmd --add-port=6942/tcp --permanent
 sudo firewall-cmd --add-port=9091/tcp --permanent
+sudo firewall-cmd --add-port=9796/tcp --permanent
+sudo firewall-cmd --add-port=6942/tcp --permanent
+
 ### CNI specific ports
 # 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows
 sudo firewall-cmd --add-port=4244/tcp --permanent
+# Only required in a multi-node cluster setup:
 # Cilium healthcheck related permits:
-sudo firewall-cmd --add-port=4240/tcp --permanent
-sudo firewall-cmd --remove-icmp-block=echo-request --permanent
-sudo firewall-cmd --remove-icmp-block=echo-reply --permanent
-# Since we are using Cilium with GENEVE as overlay, we need the following port too:
-sudo firewall-cmd --add-port=6081/udp --permanent
+#sudo firewall-cmd --add-port=4240/tcp --permanent
+#sudo firewall-cmd --remove-icmp-block=echo-request --permanent
+#sudo firewall-cmd --remove-icmp-block=echo-reply --permanent
+# Cilium with GENEVE as overlay:
+#sudo firewall-cmd --add-port=6081/udp --permanent
+
 ### Ingress Controller specific ports
 sudo firewall-cmd --add-port=80/tcp --permanent
 sudo firewall-cmd --add-port=443/tcp --permanent
 sudo firewall-cmd --add-port=10254/tcp --permanent
+
 ### Finally apply all the firewall changes
 sudo firewall-cmd --reload
 ```
@@ -339,7 +351,7 @@ public (active)
   interfaces: eno1
   sources: 
   services: cockpit dhcpv6-client ssh wireguard
-  ports: 9345/tcp 6443/tcp 10250/tcp 2379/tcp 2380/tcp 30000-32767/tcp 4240/tcp 6081/udp 80/tcp 443/tcp 4244/tcp 9796/tcp 9090/tcp 6942/tcp 9091/tcp
+  ports: 6443/tcp 10250/tcp 80/tcp 443/tcp 9796/tcp 9090/tcp 6942/tcp 9091/tcp 10254/tcp 4244/tcp
   protocols: 
   masquerade: yes
   forward-ports: 
@@ -350,6 +362,11 @@ public (active)
 
 Source:
 - https://docs.rke2.io/install/requirements/#networking
+
+#### Cilium Host Policies
+In this guide we use Cilium as CNI. Therefore we have another option to firewall our node instead of using traditional technologies like Firewalld (nftables). Cilium offers a quite powerful feature called [Host Firewall](https://docs.cilium.io/en/stable/gettingstarted/host-firewall/) which allows it to manage firewall rules for the host itself via Kubernetes resources (`CiliumClusterwideNetworkPolicy`). Cilium then uses its advanced eBPF capabilities to actually implement & enforce these rules of host level.
+
+We need a running K8s cluster and Cilium in order to activate Cilium Host Policies. Therefore its configuration is described later in an own Chilium subchapter.
 
 ### Prevent RKE2 Package Updates
 To provide more stability, I chose to DNF/YUM "mark/hold" the RKE2 related packages so a `dnf update`/`yum update` does not mess around with them.
@@ -473,11 +490,14 @@ k8sServicePort: 6443
 
 tunnel: "geneve"
 
+# IMPORTANT: Only enable hostFirewall if you're planing to use this feature and you are not using firewalld etc.
+hostFirewall:
+  enabled: true
+
 hubble:
 
   metrics:
     # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
-    # Currently fails in Cilium 1.9.1 (https://github.com/cilium/cilium/pull/14473)
     #serviceMonitor:
     #  enabled: true
     enabled:
@@ -562,6 +582,165 @@ Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
 - https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/
 - https://docs.cilium.io/en/stable/operations/upgrade/#running-pre-flight-check-required
+
+### Cilium Host Policies
+**Important:** Only continue with this subchapter if you are **not** using traditional host firewalls and want to use Cilium Host Policies instead!
+
+Since we are only running a single host (wich all three K8s roles (etcd, control plane, worker)), the rule set here will be quite small and straight forward. We only plan to filter ingress traffic. If you plan to deploy Cilium Host Policies on a multi-node cluster, please consider having a look at my other guide over in the [Puzzle ITC blog post](https://www.puzzle.ch/de/blog/articles/2021/12/16/cilium-host-policies) and/or at the very good and detailed [blog post from Charles-Edouard Brétéché](https://medium.com/@charled.breteche/kubernetes-security-explore-cilium-host-firewall-and-host-policies-de93ea9da38c).
+
+So, let's get started:
+
+First, stop and disable firewalld:
+```bash
+sudo systemctl disable --now firewalld
+sudo systemctl mask --now firewalld
+```
+
+Next, enable `PolicyAuditMode`. This is a crucial to-do before applying any host policy custom resources because it’s easy to lock yourself out of your Kubernetes node!
+```bash
+CILIUM_NAMESPACE=kube-system
+for NODE_NAME in $(kubectl get nodes --no-headers=true | awk '{print $1}')
+do
+    CILIUM_POD_NAME=$(kubectl -n $CILIUM_NAMESPACE get pods -l "k8s-app=cilium" -o jsonpath="{.items[?(@.spec.nodeName=='$NODE_NAME')].metadata.name}")
+    HOST_EP_ID=$(kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint list -o jsonpath='{[?(@.status.identity.id==1)].id}')
+    kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint config $HOST_EP_ID PolicyAuditMode=Enabled
+    kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint config $HOST_EP_ID | grep PolicyAuditMode
+done
+```
+
+To validate the activated `POLICY (ingress) ENFORCEMENT` mode, use this command here and search for the endpoint with the label `reserved:host` and identity `1`. It should be `Disabled`.
+```bash
+CILIUM_NAMESPACE=kube-system
+for NODE_NAME in $(kubectl get nodes --no-headers=true | awk '{print $1}')
+do
+    CILIUM_POD_NAME=$(kubectl -n $CILIUM_NAMESPACE get pods -l "k8s-app=cilium" -o jsonpath="{.items[?(@.spec.nodeName=='$NODE_NAME')].metadata.name}")
+    kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint list
+done
+```
+
+Now we can create our `CiliumClusterwideNetworkPolicy` YAML manifest (`ccnp-rke2-singlehost-host-rule-set.yaml`):
+```yaml
+apiVersion: "cilium.io/v2"
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: "rke2-singlehost-host-rule-set"
+spec:
+  description: "Cilium host policy set for RKE2 single nodes"
+  nodeSelector:
+    matchLabels:
+      node.kubernetes.io/instance-type: rke2
+  ingress:
+  - fromEntities:
+    - all
+    toPorts:
+    - ports:
+        # SSH
+      - port: "22"
+        protocol: TCP
+        # Ingress HTTP
+      - port: "80"
+        protocol: TCP
+        # Ingress HTTPS
+      - port: "443"
+        protocol: TCP
+        # Kubernetes API
+      - port: "6443"
+        protocol: TCP
+  - fromEntities:
+    - cluster
+    toPorts:
+    - ports:
+        # Cilium Hubble relay
+      - port: "4244"
+        protocol: TCP
+        # Rancher monitoring Cilium operator metrics
+      - port: "6942"
+        protocol: TCP
+        # Cilium cilium-agent Prometheus metrics
+      - port: "9090"
+        protocol: TCP
+        # Cilium cilium-hubble Prometheus metrics
+      - port: "9091"
+        protocol: TCP
+        # Rancher Monitoring Node Exporter
+      - port: "9796"
+        protocol: TCP
+        # RKE2 Kubelet
+      - port: "10250"
+        protocol: TCP
+        # Nginx Metrics
+      - port: "10254"
+        protocol: TCP
+```
+
+Apply the just created `CiliumClusterwideNetworkPolicy`:
+```bash
+kubectl apply -f ccnp-rke2-singlehost-host-rule-set.yaml
+```
+
+If you now run the command to check the activated `POLICY (ingress) ENFORCEMENT` mode once again, you will see it changed from `Disabled` to `Disabled (Audit)` (remember searching for the endpoint with the label `reserved:host` and identity `1`):
+```bash
+CILIUM_NAMESPACE=kube-system
+for NODE_NAME in $(kubectl get nodes --no-headers=true | awk '{print $1}')
+do
+    CILIUM_POD_NAME=$(kubectl -n $CILIUM_NAMESPACE get pods -l "k8s-app=cilium" -o jsonpath="{.items[?(@.spec.nodeName=='$NODE_NAME')].metadata.name}")
+    kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint list
+done
+```
+
+In my example, the endpoint output looks like this:
+```bash
+ENDPOINT   POLICY (ingress)   POLICY (egress)   IDENTITY   LABELS (source:key[=value])                                                                                IPv6   IPv4           STATUS
+           ENFORCEMENT        ENFORCEMENT
+2710       Disabled (Audit)   Disabled          1          k8s:egress.rke2.io/cluster=true                                                                                                  ready
+                                                           k8s:node-role.kubernetes.io/control-plane=true
+                                                           k8s:node-role.kubernetes.io/etcd=true
+                                                           k8s:node-role.kubernetes.io/master=true
+                                                           k8s:node.kubernetes.io/instance-type=rke2
+                                                           reserved:host
+```
+
+Before we now disable the `PolicyAuditMode`, we need to have a look at the packets which would have been dropped if the rules were already enforced:
+```bash
+# Set Cilium namespace
+CILIUM_NAMESPACE=kube-system
+# Print Cilium pod names to console:
+CILIUM_POD_NAME=$(kubectl -n $CILIUM_NAMESPACE get pods -l "k8s-app=cilium" -o jsonpath="{.items[*].metadata.name}")
+# Find the Cilium endpoint ID of the host itself (again, search for the endpoint the the label "reserved:host"):
+kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint list
+# Output all connections (allowed & audited) - in my case HOST_EP_ID was "2710"
+kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium monitor -t policy-verdict --related-to <HOST_EP_ID>
+```
+
+In my example, I only saw allowed connections (`action allow`) for the relevant ports:
+```bash
+$ kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium monitor -t policy-verdict --related-to 2710
+Listening for events on 12 CPUs with 64x4096 of shared memory
+Press Ctrl-C to quit
+level=info msg="Initializing dissection cache..." subsys=monitor
+Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54037 -> 10.0.0.5:443 tcp SYN
+Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54146 -> 10.0.0.5:443 tcp SYN
+Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54236 -> 10.0.0.5:22 tcp SYN
+Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54236 -> 10.0.0.5:22 tcp SYN
+Policy verdict log: flow 0x77be7fd5 local EP ID 2710, remote ID 15525, proto 6, ingress, action allow, match L4-Only, 100.64.0.164:58596 -> 10.0.0.5:6443 tcp SYN
+Policy verdict log: flow 0x77be7fd5 local EP ID 2710, remote ID 15525, proto 6, ingress, action allow, match L4-Only, 100.64.0.164:58596 -> 10.0.0.5:6443 tcp SYN
+```
+
+Once we're confident that the rule set is fine and no essential connections get blocked, set the policy mode to enforcing (by disabling `PolicyAuditMode`):
+```bash
+for NODE_NAME in $(kubectl get nodes --no-headers=true | awk '{print $1}')
+do
+    CILIUM_POD_NAME=$(kubectl -n $CILIUM_NAMESPACE get pods -l "k8s-app=cilium" -o jsonpath="{.items[?(@.spec.nodeName=='$NODE_NAME')].metadata.name}")
+    HOST_EP_ID=$(kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint list -o jsonpath='{[?(@.status.identity.id==1)].id}')
+    kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint config $HOST_EP_ID PolicyAuditMode=Disabled
+done
+```
+
+The node is now firewalled via Cilium with eBPF in the background, while we can manage the required rules in the same easy way as any other “traditional” Kubernetes NetworkPolicy – via Kubernetes (custom) resources.
+
+Sources:
+- https://docs.cilium.io/en/stable/gettingstarted/host-firewall/
+- https://www.puzzle.ch/de/blog/articles/2021/12/16/cilium-host-policies
 
 ## Persistent Storage using NFS-SubDir-External-Provisioner
 Used to provide persistent storage via NFS from the Synology NAS. It creates subdirectories for every Persistent Volume created on the K8s cluster (name schema: `${namespace}-${pvcName}-${pvName}`).

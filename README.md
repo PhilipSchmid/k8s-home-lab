@@ -11,7 +11,7 @@ The technologies down here will probably change in the future. Nevertheless, the
 | What                   | Technology                                        | Status     |
 | ---------------------- | ------------------------------------------------- | ---------- |
 | DNS Provider           | DigitalOcean (automated with External-DNS)        | Done       |
-| OS (Intel NUC)         | Red Hat 8                                         | Done       |
+| OS (Intel NUC)         | Rocky Linux 8.6                                   | Done       |
 | Distributon            | Rancher (RKE2)                                    | Done       |
 | CRI                    | containerd (included in RKE2)                     | Done       |
 | CNI                    | Cilium                                            | Done       |
@@ -101,7 +101,7 @@ In my case, I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Cor
 # Prerequisites
 
 ## Host OS
-Download and install Red Hat 8 server from https://developers.redhat.com/topics/linux. After creating a free developer account, you will be able to run 1 Red Hat enterprise server for free (development use only).
+Download Rocky Linux 8.6 from https://rockylinux.org/download and install it using a USB stick. To flash the ISO to the USB, I'll recommend you [Etcher](https://github.com/balena-io/etcher).
 
 ### Disable Swap
 ```bash
@@ -312,7 +312,7 @@ sudo firewall-cmd --add-port=2380/tcp --permanent
 sudo firewall-cmd --add-port=30000-32767/tcp --permanent
 # Used for the Rancher Monitoring
 sudo firewall-cmd --add-port=9796/tcp --permanent
-sudo firewall-cmd --add-port=19090/tcp --permanent
+sudo firewall-cmd --add-port=9090/tcp --permanent
 sudo firewall-cmd --add-port=6942/tcp --permanent
 sudo firewall-cmd --add-port=9091/tcp --permanent
 ### CNI specific ports
@@ -341,7 +341,7 @@ public (active)
   interfaces: eno1
   sources: 
   services: cockpit dhcpv6-client ssh wireguard
-  ports: 9345/tcp 6443/tcp 10250/tcp 2379/tcp 2380/tcp 30000-32767/tcp 4240/tcp 6081/udp 80/tcp 443/tcp 4244/tcp 9796/tcp 19090/tcp 6942/tcp 9091/tcp
+  ports: 9345/tcp 6443/tcp 10250/tcp 2379/tcp 2380/tcp 30000-32767/tcp 4240/tcp 6081/udp 80/tcp 443/tcp 4244/tcp 9796/tcp 9090/tcp 6942/tcp 9091/tcp
   protocols: 
   masquerade: yes
   forward-ports: 
@@ -437,7 +437,7 @@ Important RKE2 (log) files:
 
 ### Cilium Prerequisites
 
-Ensure the eBFP file system is mounted (which should already be the case on RHEL 8.3):
+Ensure the eBFP file system is mounted (which should already be the case on RHEL 8 based distros):
 ```bash
 mount | grep /sys/fs/bpf
 # if present should output, e.g. "none on /sys/fs/bpf type bpf"...
@@ -523,8 +523,6 @@ ipam:
 
 prometheus:
   enabled: true
-  # Default port value (9090) needs to be changed since the RHEL cockpit also listens on this port.
-  port: 19090
   # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
   #serviceMonitor:
   #  enabled: true
@@ -1027,7 +1025,7 @@ prometheus:
     enabled: true
 ```
 
-**Hint:** Ensure to open `19090/TCP`, `9091/TCP` and `6942/TCP` on the node since cilium exposes the Prometheus metrics on these ports.
+**Hint:** Ensure to open `9090/TCP`, `9091/TCP` and `6942/TCP` on the node since cilium exposes the Prometheus metrics on these ports.
 
 Do the same with the Nginx ingress by changing the values down here:
 ```yaml

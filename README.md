@@ -557,10 +557,13 @@ Finally install the Cilium helm chart:
 helm upgrade -i --atomic cilium cilium/cilium \
   --version 1.11.6 \
   --namespace kube-system \
+  --set upgradeCompatibility=1.11 \
   -f values.yaml
 ```
 
-**Hint**: When upgrading from an older Cilium version, it's recommended to run the pre-flight check first:
+**Hint 1**: The `--set upgradeCompatibility=1.11` flag is only recommended when upgrading an already existing Cilium version. The value (in this example `1.11`) should be set to the initial version of Cilium which was installed in this cluster. More details about this can be seen in the [official documentation](https://docs.cilium.io/en/stable/operations/upgrade/#step-2-use-helm-to-upgrade-your-cilium-deployment).
+
+**Hint 2**: When upgrading from an older Cilium version, it's recommended to run the pre-flight check first:
 ```bash
 helm template cilium/cilium --version 1.11.6 \
   --namespace=kube-system \
@@ -581,6 +584,8 @@ kubectl get deployment -n kube-system cilium-pre-flight-check -w
 # Cleanup:
 kubectl delete -f cilium-preflight.yaml
 ```
+
+The pre-flight check also pre-pulls the images and therefore helps reducing the downtime during the actual upgrade. This also helps to detect potential `ErrImagePull` errors in advance.
 
 Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/

@@ -1179,6 +1179,22 @@ rke2Proxy:
 
 Also remove the whole `rke2IngressNginx.client.affinity` section as we run everything on a single node.
 
+Next, disable `rke2ingressNginx` as we are also not using this component:
+```yaml
+rke2ingressNginx:
+  enabled: false
+```
+
+Continue by searching for the psp settings and disable them:
+```yaml
+global:
+  rbac:
+    pspEnabled: false
+prometheus-adapter:
+  psp:
+    create: false
+```
+
 Finally, click "Install" and wait a few minutes.
 
 **Note:** If you run into a `StorageClass "nfs": claim Selector is not supported` issue (shown as event on the Prometheus PVC), try to manually remove the empty `selector` section from `prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec`, delete the PVC and re-run the Rancher Monitoring installation (see [issues/29755](https://github.com/rancher/rancher/issues/29755#issuecomment-717997959) for more information).
@@ -1313,6 +1329,16 @@ fluentd:
     requests:
       cpu: 500m
       memory: 100M
+```
+
+Next, search for the psp settings and disable them:
+```yaml
+global:
+  psp:
+    enabled: false
+rbac:
+  psp:
+    enabled: false
 ```
 
 Finally, install it.

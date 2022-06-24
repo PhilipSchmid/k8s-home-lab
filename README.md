@@ -88,6 +88,9 @@ The technologies down here will probably change in the future. Nevertheless, the
     - [Loki Installation](#loki-installation)
     - [Add Loki Source to Grafana](#add-loki-source-to-grafana)
       - [Explore logs](#explore-logs)
+  - [OPA Gatekeeper](#opa-gatekeeper)
+    - [OPA Gatekeeper Installation](#opa-gatekeeper-installation)
+    - [Applying OPA Gatekeeper Constraints](#applying-opa-gatekeeper-constraints)
   - [Kanister Backup & Restore](#kanister-backup--restore)
 - [Application Components](#application-components)
   - [Harbor Registry](#harbor-registry)
@@ -1516,6 +1519,50 @@ Paste the below query in the log browser to test if logs are visible.
 ```
 
 ![Loki logs shown in Grafana Explore](images/TODO.png)
+
+## OPA Gatekeeper
+
+### OPA Gatekeeper Installation
+Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "OPA Gatekeeper" chart. Leave nearly all settings default except the following ones:
+
+```yaml
+psp:
+  enabled: false
+controllerManager:
+  exemptNamespacePrefixes:
+  - "kube-*"
+  - "cattle-*"
+  - "fleet-*"
+```
+
+Now, click "Install" and wait a few minutes.
+Finally, apply the following `config.gatekeeper.sh/v1alpha1` config to ensure important control plane namespaces are excluded from OPA Gatekeeper evaluation:
+
+```yaml
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  match:
+    - excludedNamespaces: ["kube-*", "cattle-*", "fleet-*"]
+      processes: ["*"]
+```
+
+Sources:
+- https://rancher.com/docs/rancher/v2.6/en/opa-gatekeper/
+- https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/
+
+### Applying OPA Gatekeeper Constraints
+The next step for OPA Gatekeeper would be to apply `ConstraintTemplates` and `Constraints` to enforce/audit specific policies. Luckily, there's a [maintained library for such policies](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library) which helps enormously since we do not have to reinvent the wheel.
+To have the exact same security measurements in place as before with PSPs one has to also add OPA Gatekeeper constraints for the following scenarios (as they are not handley by [the `baseline` Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/#baseline)):
+- [allow-privilege-escalation](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/allow-privilege-escalation)
+- [volumes](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/volumes)
+- [users](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/users)
+- [flexvolume-drivers](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/flexvolume-drivers)
+
+If you want to do that, apply each `template.yaml` from the linked paths above and slightly adjust the `sample/*/constraint.yaml` according to your needs before also applying them.
 
 ## Kanister Backup & Restore
 TODO

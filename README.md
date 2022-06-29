@@ -426,8 +426,12 @@ node1.example.com       NotReady   control-plane,etcd,master   101s   v1.23.7+rk
 ## Troubleshooting RKE2
 Show RKE2 containers (locally on a RKE2 node):
 ```bash
-/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps
-/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-name>
+# Check if all relevant static pod containers are running:
+/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps -a
+# If there are exited static pod containers, check their log (e.g. of the kube-apiserver container):
+/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml logs <container-id>
+# If the static pod container is running, you can exec into it to even troubleshoot it even more:
+/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-id>
 ```
 
 Show RKE2 nodes (locally on a RKE2 server node):

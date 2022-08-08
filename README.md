@@ -193,6 +193,7 @@ git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 # Add aliases to bashrc
 echo 'alias kctx="kubectl-ctx"' >>~/.bashrc
 echo 'alias kns="kubectl-ns"' >>~/.bashrc
+source ~/.bashrc
 ```
 
 Sources:

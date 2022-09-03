@@ -170,7 +170,7 @@ rke2 version v1.23.7+rke2r2 (d0c2bd7f1dbd30f5b7bbc2e3c899d2efde979c25)
 go version go1.17.5b7
 ```
 
-Optional: Install `kubectl` plugins `kubens` and `kubectx` via [krew](https://krew.sigs.k8s.io/):
+Optional: Install `kubectl` plugins `kubens`, `kubectx` and `tree` via [krew](https://krew.sigs.k8s.io/):
 ```bash
 # Krew installation
 (
@@ -186,6 +186,8 @@ echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >>~/.bashrc
 # Install kubens and kubectx
 kubectl krew install ctx
 kubectl krew install ns
+# Install kubectl tree
+kubectl krew install tree
 # Install fzf to use kubens and kubectx in interactive mode
 sudo dnf install git
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf

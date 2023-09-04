@@ -1,9 +1,7 @@
 # Kubernetes in a Home Lab Environment
 This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
-As I will include more and more cloud native technologies in this guide, you should probably instead have a look at my ["Quick & Dirty, Copy & Paste, Single-Host Kubernetes Setup"](https://gist.github.com/PhilipSchmid/57ce0801fbe7b68f70b9b58e1e3225b3) guide in case you simply want to spin up a minimal local K8s cluster (with networking, ingress and storage) within a few minutes.
-
-In the end, I will probably run some applications on top of this technology stack, but the main goal is to strengthen my knowledge on different new (and sometimes fancy) cloud native and Kubernetes related tools. That's also the reason why this technology stack **should not be viewed as production ready**, since the chaining of the different tools and their configurations has not been tested really well.
+This technology stack **should not be viewed as production ready**, since the chaining of the different tools and their configurations has not been tested really well.
 
 ![K8s Home Lab Topology](images/K8s-Home-Lab-Drawing.png)
 
@@ -13,23 +11,15 @@ The technologies down here will probably change in the future. Nevertheless, the
 | What                   | Technology                                        | Status     |
 | ---------------------- | ------------------------------------------------- | ---------- |
 | DNS Provider           | DigitalOcean (automated with External-DNS)        | Done       |
-| OS (Intel NUC)         | Rocky Linux 8.6                                   | Done       |
+| OS (Intel NUC)         | Rocky Linux 9.1                                   | Done       |
 | Distributon            | Rancher (RKE2)                                    | Done       |
 | CRI                    | containerd (included in RKE2)                     | Done       |
 | CNI                    | Cilium                                            | Done       |
 | CSI                    | NFS SubDir External Provisioner                   | Done       |
 | Certificate Handling   | Cert-Manager with Let's Encrypt (DNS Challenge)   | Done       |
 | Ingress Controller     | Nginx                                             | Done       |
-| Control Plane          | Rancher 2.6                                       | Done       |
-| Control Plane Backup   | Rancher Backups                                   | Done       |
-| Monitoring             | Prometheus Stack via Rancher Monitoring           | Done       |
-| Rancher Logging        | Banzai Cloud Logging Operator via Rancher Logging | Done       |
-| Container Registry     | Harbor                                            | Done       |
-| Logging                | Grafana Loki (via Rancher Logging)                | Done       |
-| Persistent Data Backup | Kanister                                          | On hold *  |
-| App Deployment         | Helm & Fleet                                      | Deprecated |
-
-`*` On hold since this feature is currently not needed.
+| Monitoring             | Grafana & Kube-Prometheus-Stack                   | Done       |
+| Cluster Management     | Rancher 2.8                                       | Done       |
 
 # Table of Content
 - [Kubernetes in a Home Lab Environment](#kubernetes-in-a-home-lab-environment)
@@ -40,13 +30,12 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [Host OS](#host-os)
     - [Disable Swap](#disable-swap)
   - [Working Directory](#working-directory)
-  - [Kubectl, Helm & RKE2](#kubectl-helm--rke2)
-  - [VPN Remote Access to the Host via Wireguard (optional)](#vpn-remote-access-to-the-host-via-wireguard-optional)
+  - [Kubectl, Helm \& RKE2](#kubectl-helm--rke2)
 - [K8s Cluster Setup](#k8s-cluster-setup)
   - [RKE2 Setup](#rke2-setup)
     - [Basic Configuration](#basic-configuration)
     - [Firewall](#firewall)
-      - [Firewalld (and nftables)](#firewalld-and-nftables)
+      - [Firewalld (nftables)](#firewalld-nftables)
       - [Cilium Host Policies](#cilium-host-policies)
     - [Prevent RKE2 Package Updates](#prevent-rke2-package-updates)
   - [Starting RKE2](#starting-rke2)
@@ -71,37 +60,15 @@ The technologies down here will probably change in the future. Nevertheless, the
   - [External-DNS](#external-dns)
     - [External-DNS Prerequisites](#external-dns-prerequisites)
     - [External-DNS Installation](#external-dns-installation)
-  - [Rancher (2.6.5)](#rancher-265)
+  - [Rancher (2.8.0)](#rancher-280)
     - [Rancher Prerequisites](#rancher-prerequisites)
     - [Rancher Installation](#rancher-installation)
-    - [Rancher Backups](#rancher-backups)
-      - [Rancher Backups Installation](#rancher-backups-installation)
-    - [Rancher Monitoring](#rancher-monitoring)
-      - [Cilium & Nginx Ingress Monitoring](#cilium--nginx-ingress-monitoring)
-      - [Cilium Grafana Dashboards](#cilium-grafana-dashboards)
-      - [Custom Nginx Ingress & Cluster Capacity Management Dashboard](#custom-nginx-ingress--cluster-capacity-management-dashboard)
-    - [Rancher Logging](#rancher-logging)
-      - [Configure ClusterOutput](#configure-clusteroutput)
-      - [Configure ClusterFlow](#configure-clusterflow)
-  - [Loki Logging Backend](#loki-logging-backend)
-    - [Loki Prerequisites](#loki-prerequisites)
-    - [Loki Installation](#loki-installation)
-    - [Add Loki Source to Grafana](#add-loki-source-to-grafana)
-      - [Explore logs](#explore-logs)
-  - [OPA Gatekeeper](#opa-gatekeeper)
-    - [OPA Gatekeeper Installation](#opa-gatekeeper-installation)
-    - [Applying OPA Gatekeeper Constraints](#applying-opa-gatekeeper-constraints)
-  - [Kanister Backup & Restore](#kanister-backup--restore)
-- [Application Components](#application-components)
-  - [Harbor Registry](#harbor-registry)
-    - [Harbor Registry Prerequisites](#harbor-registry-prerequisites)
-    - [Rancher Installation](#rancher-installation-1)
-- [Deprecated Sections](#deprecated-sections)
-  - [GitOps using Fleet](#gitops-using-fleet)
-    - [Fleet Installation](#fleet-installation)
-    - [Fleet Configuration](#fleet-configuration)
-  - [Application Component Deployments using Fleet](#application-component-deployments-using-fleet)
-    - [Minio Object Storage](#minio-object-storage)
+  - [Grafana](#grafana)
+    - [Grafana Prerequisites](#grafana-prerequisites)
+    - [Grafana Installation](#grafana-installation)
+  - [Kube-Prometheus-Stack](#kube-prometheus-stack)
+    - [Kube-Prometheus-Stack Prerequisites](#kube-prometheus-stack-prerequisites)
+    - [Kube-Prometheus-Stack Installation](#kube-prometheus-stack-installation)
 
 # Hardware
 One goal of this setup is that it should be runnable on a single host. The only exceptions are the external NFS storage from a Synology NAS and the DNS service from DigitalOcean.
@@ -111,7 +78,7 @@ In my case, I use an Intel NUC (`NUC10i7FNH2`) with a 12 core CPU (`Intel(R) Cor
 # Prerequisites
 
 ## Host OS
-Download Rocky Linux 8.6 from https://rockylinux.org/download and install it using a USB stick. To flash the ISO to the USB, I'll recommend you [Etcher](https://github.com/balena-io/etcher).
+Download Rocky Linux 9.1 from https://rockylinux.org/download and install it using a USB stick. To flash the ISO to the USB, I'll recommend you [Etcher](https://github.com/balena-io/etcher).
 
 ### Disable Swap
 ```bash
@@ -134,7 +101,7 @@ Install `kubectl`, `helm` and RKE2 to the host system:
 BINARY_DIR="/usr/local/bin"
 cd /tmp
 # Helm
-wget https://get.helm.sh/helm-v3.9.0-linux-amd64.tar.gz
+curl -LO https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
 tar -zxvf helm-*-linux-amd64.tar.gz
 sudo mv linux-amd64/helm $BINARY_DIR/helm
 sudo chmod +x $BINARY_DIR/helm
@@ -142,7 +109,7 @@ sudo chmod +x $BINARY_DIR/helm
 curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
 chmod +x ./kubectl
 sudo mv ./kubectl $BINARY_DIR/kubectl
-sudo dnf install bash-completion
+sudo dnf install -y bash-completion
 echo 'alias k="kubectl"' >>~/.bashrc
 echo 'alias kgp="kubectl get pods"' >>~/.bashrc
 echo 'alias kgn="kubectl get nodes"' >>~/.bashrc
@@ -152,27 +119,27 @@ echo 'source <(kubectl completion bash)' >>~/.bashrc
 echo 'complete -F __start_kubectl k' >>~/.bashrc
 source ~/.bashrc
 # RKE2
-curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_CHANNEL=v1.23 sh -
+curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_CHANNEL=v1.27 sh -
 ```
 
 Verification:
 ```
 # Helm
 $ helm version
-version.BuildInfo{Version:"v3.9.0", GitCommit:"7ceeda6c585217a19a1131663d8cd1f7d641b2a7", GitTreeState:"clean", GoVersion:"go1.17.5"}
-# Kubectl
+version.BuildInfo{Version:"v3.12.3", GitCommit:"3a31588ad33fe3b89af5a2a54ee1d25bfe6eaa5e", GitTreeState:"clean", GoVersion:"go1.20.7"}# Kubectl
 $ kubectl version --client=true
-Client Version: version.Info{Major:"1", Minor:"24", GitVersion:"v1.24.1", GitCommit:"3ddd0f45aa91e2f30c70734b175631bec5b5825a", GitTreeState:"clean", BuildDate:"2022-05-24T12:26:19Z", GoVersion:"go1.18.2", Compiler:"gc", Platform:"linux/amd64"}
-Kustomize Version: v4.5.4
+Client Version: v1.28.1
+Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
 # RKE2
 $ rke2 --version
-rke2 version v1.23.7+rke2r2 (d0c2bd7f1dbd30f5b7bbc2e3c899d2efde979c25)
-go version go1.17.5b7
+rke2 version v1.27.4+rke2r1 (3aaa57a9608206d95eeb9ce3f79c0ec2ea912b20)
+go version go1.20.5 X:boringcrypto
 ```
 
 Optional: Install `kubectl` plugins `kubens`, `kubectx` and `tree` via [krew](https://krew.sigs.k8s.io/):
 ```bash
 # Krew installation
+sudo dnf install -y git
 (
   set -x; cd "$(mktemp -d)" &&
   OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
@@ -183,13 +150,13 @@ Optional: Install `kubectl` plugins `kubens`, `kubectx` and `tree` via [krew](ht
   ./"${KREW}" install krew
 )
 echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >>~/.bashrc
+source ~/.bashrc
 # Install kubens and kubectx
 kubectl krew install ctx
 kubectl krew install ns
 # Install kubectl tree
 kubectl krew install tree
 # Install fzf to use kubens and kubectx in interactive mode
-sudo dnf install git
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install
 # Add aliases to bashrc
@@ -207,8 +174,6 @@ Sources:
 - https://github.com/ahmetb/kubectx#kubectl-plugins-macos-and-linux
 - https://github.com/junegunn/fzf#using-git
 
-## VPN Remote Access to the Host via Wireguard (optional)
-See https://gist.github.com/PhilipSchmid/b2ac0774fa99ec1286d63d2307a570a3 for more information.
 
 # K8s Cluster Setup
 ## RKE2 Setup
@@ -218,7 +183,7 @@ Create a RKE2 config file (`/etc/rancher/rke2/config.yaml`) with the following c
 ```yaml
 write-kubeconfig-mode: "0644"
 tls-san:
-  - "k8s.example.com"
+- "k8s.example.com"
 # Make a etcd snapshot every 2 hours
 etcd-snapshot-schedule-cron: " */2 * * *"
 # Keep 56 etcd snapshorts (equals to 2 weeks with 6 a day)
@@ -240,7 +205,6 @@ kubelet-arg:
 - "kube-reserved=cpu=200m,memory=500Mi"
 - "system-reserved=cpu=200m,memory=500Mi"
 kube-apiserver-arg:
-- "--enable-admission-plugins=NodeRestriction,PodSecurity"
 - "--admission-control-config-file=/etc/kubernetes/pss/cluster-default-pss-config.yaml"
 kube-apiserver-extra-mount:
 - "/etc/rancher/rke2/pss:/etc/kubernetes/pss"
@@ -249,7 +213,6 @@ kube-apiserver-extra-mount:
 **Please note:**
 - I set `disable-kube-proxy` to `true` and `cni` to `none`, since I plan to install Cilium as CNI in ["kube-proxy less mode"](https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/) (`kubeProxyReplacement: "strict"`). Do not disable kube-proxy if you use another CNI - it will not work afterwards!
 - I also disabled `rke2-ingress-nginx` since I wanted to install and configure the Nginx Ingress Controller according to my taste (Daemonset in host network namespace).
-- As [PSPs](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecuritypolicy) will be [removed in K8s 1.25](https://kubernetes.io/blog/2021/04/06/podsecuritypolicy-deprecation-past-present-and-future/), we don't even want to start with PSP anymore and instead directly start using [PSA](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#podsecurity) by configuring the regarding admission controller plugin (`PodSecurity`). The RKE2 default value for the `enable-admission-plugins` flag can be seen [here](https://github.com/rancher/rke2/blob/master/pkg/cli/defaults/defaults.go#L31).
 - Please be aware that you'll need this same configuration on every single master node when you set up a multi-node cluster. In such a case, you additionally need to configure `token` and `server` (more details in the official [RKE2 server configuration reference](https://docs.rke2.io/install/install_options/server_config/)).
 
 Next, as we want to use PSA, we need to define a default `AdmissionConfiguration` which specifies the default PodSecurityStandard (PSS) policy for all namespaces.
@@ -265,11 +228,11 @@ plugins:
     kind: PodSecurityConfiguration
     defaults:
       enforce: "baseline"
-      enforce-version: "v1.23"
+      enforce-version: "v1.27"
       audit: "baseline"
-      audit-version: "v1.23"
+      audit-version: "v1.27"
       warn: "baseline"
-      warn-version: "v1.23"
+      warn-version: "v1.27"
     exemptions:
       usernames: []
       runtimeClasses: []
@@ -280,11 +243,11 @@ plugins:
 This functions as a default configuration and can be overridden on namespace level. To do so, you simply need to specify the less restrictive PodSecurityStandard (`privileged`) via labels on the namespace resources. Here an example for `demobackend`:
 ```bash
 kubectl label namespace demobackend pod-security.kubernetes.io/enforce=privileged
-kubectl label namespace demobackend pod-security.kubernetes.io/enforce-version=v1.23
+kubectl label namespace demobackend pod-security.kubernetes.io/enforce-version=v1.27
 kubectl label namespace demobackend pod-security.kubernetes.io/audit=privileged
-kubectl label namespace demobackend pod-security.kubernetes.io/audit-version=v1.23
+kubectl label namespace demobackend pod-security.kubernetes.io/audit-version=v1.27
 kubectl label namespace demobackend pod-security.kubernetes.io/warn=privileged
-kubectl label namespace demobackend pod-security.kubernetes.io/warn-version=v1.23
+kubectl label namespace demobackend pod-security.kubernetes.io/warn-version=v1.27
 ```
 
 **Important:** Please be aware that setting a Namespaces' PSS policy to `privileged` basically means its workload can do anything without any restriction! For that reason, it's absolutely key to only configure this policy when there is really no other option - especially in production. Also, I would highly recommend you to also deploy OPA Gatekeeper in addition to PSA to enforce [custom constraints](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library) and therefore restrict various dangerous configurations.
@@ -315,8 +278,8 @@ Sources:
 
 ### Firewall
 
-#### Firewalld (and nftables)
-Ensure to open the required ports:
+#### Firewalld (nftables)
+In case you have a host firewall installed and don't want to use [Cilium Host Firewall](https://docs.cilium.io/en/stable/security/host-firewall/), ensure to open the required ports:
 ```bash
 ### RKE2 specific ports
 sudo firewall-cmd --add-port=6443/tcp --permanent
@@ -324,15 +287,20 @@ sudo firewall-cmd --add-port=10250/tcp --permanent
 # Only required when NodePort services are used:
 #sudo firewall-cmd --add-port=30000-32767/tcp --permanent
 # Only required in a multi-node cluster setup:
+# ETCD client communication
 #sudo firewall-cmd --add-port=2379/tcp --permanent
+# ETCD peer communication
 #sudo firewall-cmd --add-port=2380/tcp --permanent
+# ETCD metrics
+#sudo firewall-cmd --add-port=2381/tcp --permanent
+# RKE2 management port
 #sudo firewall-cmd --add-port=9345/tcp --permanent
 
-# Used for the Rancher Monitoring
-sudo firewall-cmd --add-port=9090/tcp --permanent
-sudo firewall-cmd --add-port=9091/tcp --permanent
-sudo firewall-cmd --add-port=9796/tcp --permanent
-sudo firewall-cmd --add-port=6942/tcp --permanent
+# Allow Rancher Monitoring to scrape metrics
+# Node Exporter
+sudo firewall-cmd --add-port=9100/tcp --permanent
+# RKE2 Kubelet
+sudo firewall-cmd --add-port=10250/tcp --permanent
 
 ### CNI specific ports
 # 4244/TCP is required when the Hubble Relay is enabled and therefore needs to connect to all agents to collect the flows
@@ -342,8 +310,12 @@ sudo firewall-cmd --add-port=4244/tcp --permanent
 #sudo firewall-cmd --add-port=4240/tcp --permanent
 #sudo firewall-cmd --remove-icmp-block=echo-request --permanent
 #sudo firewall-cmd --remove-icmp-block=echo-reply --permanent
-# Cilium with GENEVE as overlay:
-#sudo firewall-cmd --add-port=6081/udp --permanent
+# Cilium with VXLAN as overlay:
+#sudo firewall-cmd --add-port=8472/udp --permanent
+# Used for the Rancher Monitoring to scrape Cilium metrics
+sudo firewall-cmd --add-port=9962/tcp --permanent
+sudo firewall-cmd --add-port=9963/tcp --permanent
+sudo firewall-cmd --add-port=9965/tcp --permanent
 
 ### Ingress Controller specific ports
 sudo firewall-cmd --add-port=80/tcp --permanent
@@ -352,24 +324,6 @@ sudo firewall-cmd --add-port=10254/tcp --permanent
 
 ### Finally apply all the firewall changes
 sudo firewall-cmd --reload
-```
-
-Verification:
-```
-$ sudo firewall-cmd --list-all
-public (active)
-  target: default
-  icmp-block-inversion: no
-  interfaces: eno1
-  sources: 
-  services: cockpit dhcpv6-client ssh wireguard
-  ports: 6443/tcp 10250/tcp 80/tcp 443/tcp 9796/tcp 9090/tcp 6942/tcp 9091/tcp 10254/tcp 4244/tcp
-  protocols: 
-  masquerade: yes
-  forward-ports: 
-  source-ports: 
-  icmp-blocks: 
-  rich rules: 
 ```
 
 Source:
@@ -391,9 +345,9 @@ exclude=rke2-*
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```
 $ sudo rpm -qa "*rke2*"
-rke2-common-1.23.7~rke2r2-0.el8.x86_64
-rke2-selinux-0.9-1.el8.noarch
-rke2-server-1.23.7~rke2r2-0.el8.x86_64
+rke2-selinux-0.14-1.el9.noarch
+rke2-common-1.27.4~rke2r1-0.el9.x86_64
+rke2-server-1.27.4~rke2r1-0.el9.x86_64
 ```
 
 Sources:
@@ -423,35 +377,33 @@ Verification:
 ```
 $ kubectl get nodes
 NAME                    STATUS     ROLES                       AGE    VERSION
-node1.example.com       NotReady   control-plane,etcd,master   101s   v1.23.7+rke2r2
+node1.example.com       NotReady   control-plane,etcd,master   79s    v1.27.4+rke2r1
 ```
 
 ## Troubleshooting RKE2
 Show RKE2 containers (locally on a RKE2 node):
 ```bash
 # Check if all relevant static pod containers are running:
-/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps -a
+sudo /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml ps -a
 # If there are exited static pod containers, check their log (e.g. of the kube-apiserver container):
-/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml logs <container-id>
+sudo /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml logs <container-id>
 # If the static pod container is running, you can exec into it to even troubleshoot it even more:
-/var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-id>
+sudo /var/lib/rancher/rke2/bin/crictl --config /var/lib/rancher/rke2/agent/etc/crictl.yaml exec -it <container-id>
 ```
 
 Show RKE2 nodes (locally on a RKE2 server node):
 ```bash
-/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes
+sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes
 ```
 
 Show status uf RKE2 related services:
 ```bash
-# On all RKE2 nodes:
-systemctl status rancher-system-agent
 # On server node:
-systemctl status rke2-server
-journalctl -fu rke2-server
+sudo systemctl status rke2-server
+sudo journalctl -fu rke2-server
 # On worker node:
-systemctl status rke2-agent
-journalctl -fu rke2-agent
+sudo systemctl status rke2-agent
+sudo journalctl -fu rke2-agent
 ```
 
 Important RKE2 (log) files:
@@ -460,7 +412,6 @@ Important RKE2 (log) files:
 - Kubelet log: `/var/lib/rancher/rke2/agent/logs/kubelet.log`
 - Containerd Config TOML: `/var/lib/rancher/rke2/agent/etc/containerd/config.toml`
 - Containerd log: `/var/lib/rancher/rke2/agent/containerd/containerd.log`
-- Rancher System Agent Config: `/etc/rancher/agent/config.yaml`
 
 # Basic Infrastructure Components
 
@@ -468,7 +419,7 @@ Important RKE2 (log) files:
 
 ### Cilium Prerequisites
 
-Ensure the eBFP file system is mounted (which should already be the case on RHEL 8 based distros):
+Ensure the eBFP file system is mounted (which should already be the case on RHEL 9 based distros):
 ```bash
 mount | grep /sys/fs/bpf
 # if present should output, e.g. "none on /sys/fs/bpf type bpf"...
@@ -487,43 +438,80 @@ Prepare & add the Helm chart repo:
 cd ~/rke2
 mkdir cilium
 helm repo add cilium https://helm.cilium.io/
-helm repo update
+helm repo update cilium
 ```
 
 Sources:
 - https://docs.cilium.io/en/stable/operations/system_requirements/#mounted-ebpf-filesystem
 
 ### Cilium Installation
+Install dependency CRDs:
+```bash
+# Install Cert-Manager CRDs
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.1/cert-manager.crds.yaml
+# Install Prometheus CRDs
+kubectl apply -f https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.67.1/stripped-down-crds.yaml
+```
+
 Create a `values.yaml` file with the following configuration:
 ```yaml
-# Set kubeProxyReplacement to "strict" in order to prevent CVE-2020-8554 and fully remove kube-proxy.
+# Enable/disable debug logging
+debug:
+  enabled: false
+  # -- Configure verbosity levels for debug logging
+  # This option is used to enable debug messages for operations related to such
+  # sub-system such as (e.g. kvstore, envoy, datapath or policy), and flow is
+  # for enabling debug messages emitted per request, message and connection.
+  #
+  # Applicable values:
+  # - flow
+  # - kvstore
+  # - envoy
+  # - datapath
+  # - policy
+  verbose: ~
+
+# Configure unique cluster name & ID
+cluster:
+  name: cl01
+  id: 1
+
+# Set kubeProxyReplacement to "true" in order to prevent CVE-2020-8554 and fully remove kube-proxy.
 # See https://cilium.io/blog/2020/12/11/kube-proxy-free-cve-mitigation for more information.
-kubeProxyReplacement: "strict"
+kubeProxyReplacement: "true"
 
 # The following two "k8sService.*" properties are required when Cilium is configured to fully replace kube-proxy since otherways it tries to reach the kube-apiserver on startup via the Service IP which does of course does not work without kube-proxy (iptables rules).
 k8sServiceHost: <node-ip-of-node-where-kube-apiserver-is-running>
 k8sServicePort: 6443
 
-tunnel: "geneve"
+# Let's use VXLAN-based encapsulation with tunnel-based routing
+tunnelProtocol: "vxlan"
+routingMode: "tunnel"
 
 # IMPORTANT: Only enable hostFirewall if you're planing to use this feature and you are not using firewalld etc.
 hostFirewall:
   enabled: true
 
 hubble:
-
   metrics:
-    # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
-    #serviceMonitor:
-    #  enabled: true
+    serviceMonitor:
+      enabled: true
+    enableOpenMetrics: true
     enabled:
-    - dns:query;ignoreAAAA
-    - drop
-    - tcp
-    - flow
-    - icmp
-    - http
-
+    # https://docs.cilium.io/en/stable/observability/metrics/#hubble-exported-metrics
+    # Remove `;query` from the `dns` line for production -> bad metrics cardinality
+    - dns:labelsContext=source_namespace,destination_namespace;query
+    - drop:labelsContext=source_namespace,destination_namespace
+    - tcp:labelsContext=source_namespace,destination_namespace
+    - port-distribution:labelsContext=source_namespace,destination_namespace
+    - icmp:labelsContext=source_namespace,destination_namespace;sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity
+    - flow:sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity;labelsContext=source_namespace,destination_namespace
+    - "httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction;sourceContext=workload-name|reserved-identity;destinationContext=workload-name|reserved-identity"
+    - "policy:sourceContext=app|workload-name|pod|reserved-identity;destinationContext=app|workload-name|pod|dns|reserved-identity;labelsContext=source_namespace,destination_namespace"
+    dashboards:
+      enabled: true
+      annotations:
+        grafana_folder: "Cilium Hubble Dashboards"
   ui:
     enabled: true
     ingress:
@@ -535,37 +523,57 @@ hubble:
       tls:
       - secretName: letsencrypt-hubble-ui
         hosts:
-        - hubble.example.com 
-
+        - hubble.example.com
   relay:
     enabled: true
+    prometheus:
+      enabled: true
+      serviceMonitor:
+        enabled: true
 
-# Since we only have 1 node, we only need 1 replica:
+# Cilium Operator
 operator:
+  # Since we only have 1 node, we only need 1 replica:
   replicas: 1
-  # Configure this prometheus section AFTER Rancher Monitoring is enabled!
-  #prometheus:
-  #  enabled: true
-  #  serviceMonitor:
-  #    enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  dashboards:
+    enabled: true
+    annotations:
+      grafana_folder: "Cilium Operator Dashboards"
 
+# Configure IPAM/PodCIDR
 ipam:
+  mode: cluster-pool
   operator:
     clusterPoolIPv4PodCIDRList:
     - "100.64.0.0/14"
+    clusterPoolIPv4MaskSize: 24
 
+# Enable Cilium Agent metrics
 prometheus:
   enabled: true
-  # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
-  #serviceMonitor:
-  #  enabled: true
+  serviceMonitor:
+    enabled: true
+
+# Cilium Agent Dashboards
+dashboards:
+  enabled: true
+  annotations:
+    grafana_folder: "Cilium Agent Dashboards"
+
+# Disable IPv6 support if IPv6 isn't used
+ipv6:
+  enabled: false
 ```
 **Note:** Check the official [cilium/values.yaml](https://github.com/cilium/cilium/blob/master/install/kubernetes/cilium/values.yaml) in order to see all available values.
 
 Finally install the Cilium helm chart:
 ```bash
-helm upgrade -i --atomic cilium cilium/cilium \
-  --version 1.11.6 \
+helm upgrade -i cilium cilium/cilium \
+  --version 1.14.1 \
   --namespace kube-system \
   --set upgradeCompatibility=1.11 \
   -f values.yaml
@@ -575,7 +583,7 @@ helm upgrade -i --atomic cilium cilium/cilium \
 
 **Hint 2**: When upgrading from an older Cilium version, it's recommended to run the pre-flight check first:
 ```bash
-helm template cilium/cilium --version 1.11.6 \
+helm template cilium/cilium --version 1.14.1 \
   --namespace=kube-system \
   --set preflight.enabled=true \
   --set agent=false \
@@ -595,18 +603,17 @@ kubectl get deployment -n kube-system cilium-pre-flight-check -w
 kubectl delete -f cilium-preflight.yaml
 ```
 
-The pre-flight check also pre-pulls the images and therefore helps reducing the downtime during the actual upgrade. This also helps to detect potential `ErrImagePull` errors in advance.
+The pre-flight validates existing CiliumNetworkPolicies for the new Cilium version and also "pre-pulls" the images. This therefore helps reducing the downtime during the actual upgrade. In addition, it helps to detect potential `ErrImagePull` errors in advance.
 
 Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/
-- https://docs.cilium.io/en/stable/gettingstarted/k8s-install-etcd-operator/
-- https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/
+- https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#kubeproxy-free
 - https://docs.cilium.io/en/stable/operations/upgrade/#running-pre-flight-check-required
 
 ### Cilium Host Policies
 **Important:** Only continue with this subchapter if you are **not** using traditional host firewalls and want to use Cilium Host Policies instead!
 
-Since we are only running a single host (wich all three K8s roles (etcd, control plane, worker)), the rule set here will be quite small and straight forward. We only plan to filter ingress traffic. If you plan to deploy Cilium Host Policies on a multi-node cluster, please consider having a look at my other guide over in the [Puzzle ITC blog post](https://www.puzzle.ch/de/blog/articles/2021/12/16/cilium-host-policies) and/or at the very good and detailed [blog post from Charles-Edouard Brétéché](https://medium.com/@charled.breteche/kubernetes-security-explore-cilium-host-firewall-and-host-policies-de93ea9da38c).
+Since we are only running a single host (with all three K8s roles (etcd, control plane, worker)), the rule set here will be quite small and straight forward. We only plan to filter ingress traffic. If you plan to deploy Cilium Host Policies on a multi-node cluster, please consider having a look at my other guide over in the [Puzzle ITC blog post](https://www.puzzle.ch/de/blog/articles/2021/12/16/cilium-host-policies), the [cilium-netpol-demo](https://github.com/PhilipSchmid/cilium-netpol-demo) and/or at the very good and detailed [blog post from Charles-Edouard Brétéché](https://medium.com/@charled.breteche/kubernetes-security-explore-cilium-host-firewall-and-host-policies-de93ea9da38c).
 
 So, let's get started:
 
@@ -670,26 +677,23 @@ spec:
     - cluster
     toPorts:
     - ports:
-        # Cilium Hubble relay
+        # Cilium Hubble server
       - port: "4244"
         protocol: TCP
-        # Rancher monitoring Cilium operator metrics
-      - port: "6942"
+        # Node Exporter metrics
+      - port: "9100"
         protocol: TCP
         # Cilium cilium-agent Prometheus metrics
-      - port: "9090"
+      - port: "9962"
+        protocol: TCP
+        # Rancher monitoring Cilium operator metrics
+      - port: "9963"
         protocol: TCP
         # Cilium cilium-hubble Prometheus metrics
-      - port: "9091"
-        protocol: TCP
-        # Rancher Monitoring Node Exporter
-      - port: "9796"
+      - port: "9965"
         protocol: TCP
         # RKE2 Kubelet
       - port: "10250"
-        protocol: TCP
-        # Nginx Metrics
-      - port: "10254"
         protocol: TCP
 ```
 
@@ -710,10 +714,9 @@ done
 
 In my example, the endpoint output looks like this:
 ```bash
-ENDPOINT   POLICY (ingress)   POLICY (egress)   IDENTITY   LABELS (source:key[=value])                                                                                IPv6   IPv4           STATUS
+ENDPOINT   POLICY (ingress)   POLICY (egress)   IDENTITY   LABELS (source:key[=value])                                                    IPv6   IPv4           STATUS
            ENFORCEMENT        ENFORCEMENT
-2710       Disabled (Audit)   Disabled          1          k8s:egress.rke2.io/cluster=true                                                                                                  ready
-                                                           k8s:node-role.kubernetes.io/control-plane=true
+46         Disabled (Audit)   Disabled          1          k8s:node-role.kubernetes.io/control-plane=true                                                       ready
                                                            k8s:node-role.kubernetes.io/etcd=true
                                                            k8s:node-role.kubernetes.io/master=true
                                                            k8s:node.kubernetes.io/instance-type=rke2
@@ -726,24 +729,15 @@ Before we now disable the `PolicyAuditMode`, we need to have a look at the packe
 CILIUM_NAMESPACE=kube-system
 # Print Cilium pod names to console:
 CILIUM_POD_NAME=$(kubectl -n $CILIUM_NAMESPACE get pods -l "k8s-app=cilium" -o jsonpath="{.items[*].metadata.name}")
-# Find the Cilium endpoint ID of the host itself (again, search for the endpoint the the label "reserved:host"):
-kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium endpoint list
-# Output all connections (allowed & audited) - in my case HOST_EP_ID was "2710"
-kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium monitor -t policy-verdict --related-to <HOST_EP_ID>
+# Output all connections - in my case HOST_EP_ID was "46"
+kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- hubble observe -t policy-verdict -f --identity 1
 ```
 
-In my example, I only saw allowed connections (`action allow`) for the relevant ports:
+In my example, I only saw allowed connections (`INGRESS ALLOWED`) for some relevant ports:
 ```bash
-$ kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- cilium monitor -t policy-verdict --related-to 2710
-Listening for events on 12 CPUs with 64x4096 of shared memory
-Press Ctrl-C to quit
-level=info msg="Initializing dissection cache..." subsys=monitor
-Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54037 -> 10.0.0.5:443 tcp SYN
-Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54146 -> 10.0.0.5:443 tcp SYN
-Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54236 -> 10.0.0.5:22 tcp SYN
-Policy verdict log: flow 0x0 local EP ID 2710, remote ID world, proto 6, ingress, action allow, match L4-Only, 10.0.0.20:54236 -> 10.0.0.5:22 tcp SYN
-Policy verdict log: flow 0x77be7fd5 local EP ID 2710, remote ID 15525, proto 6, ingress, action allow, match L4-Only, 100.64.0.164:58596 -> 10.0.0.5:6443 tcp SYN
-Policy verdict log: flow 0x77be7fd5 local EP ID 2710, remote ID 15525, proto 6, ingress, action allow, match L4-Only, 100.64.0.164:58596 -> 10.0.0.5:6443 tcp SYN
+$ kubectl -n $CILIUM_NAMESPACE exec $CILIUM_POD_NAME -c cilium-agent -- hubble observe -t policy-verdict -f --identity 1
+Sep  4 20:09:21.849: <hidden-ip>:61199 (world) -> 10.0.0.4:6443 (host) policy-verdict:L4-Only INGRESS ALLOWED (TCP Flags: SYN)
+Sep  4 20:10:23.292: <hidden-ip>:61206 (world) -> 10.0.0.4:22 (host) policy-verdict:L4-Only INGRESS ALLOWED (TCP Flags: SYN)
 ```
 
 Once we're confident that the rule set is fine and no essential connections get blocked, set the policy mode to enforcing (by disabling `PolicyAuditMode`):
@@ -760,6 +754,7 @@ The node is now firewalled via Cilium with eBPF in the background, while we can 
 
 Sources:
 - https://docs.cilium.io/en/stable/gettingstarted/host-firewall/
+- https://github.com/PhilipSchmid/cilium-netpol-demo
 - https://www.puzzle.ch/de/blog/articles/2021/12/16/cilium-host-policies
 
 ## Persistent Storage using NFS-SubDir-External-Provisioner
@@ -773,12 +768,12 @@ Prepare & add the Helm chart repo:
 ```bash
 mkdir ~/rke2/nfs-subdir-external-provisioner
 helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
-helm repo update
+helm repo update nfs-subdir-external-provisioner
 ```
 
 Ensure the nfs protocol is known to the host system:
 ```bash
-sudo dnf install nfs-utils
+sudo dnf install -y nfs-utils
 ```
 
 ### NFS-SubDir-External-Provisioner Installation
@@ -797,8 +792,8 @@ storageClass:
 
 Finally, install the NFS SubDir external provisioner helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
-  --version 4.0.16 \
+helm upgrade -i --create-namespace nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+  --version 4.0.18 \
   --namespace nfs-subdir-provisioner \
   -f values.yaml
 ```
@@ -816,39 +811,35 @@ Prepare & add the Helm chart repo:
 ```bash
 mkdir ~/rke2/ingress-nginx
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
+helm repo update ingress-nginx
 ```
 
 ### Nginx Ingress Controller Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
 controller:
-  dnsPolicy: ClusterFirstWithHostNet
-  hostNetwork: true
-  kind: "DaemonSet"
-
-  # Make use of the IngressClass concept
   ingressClassResource:
     name: nginx
     enabled: true
     default: true
     controllerValue: "k8s.io/ingress-nginx"
   ingressClass: nginx
-  # ... nevertheless, still watch of Ingress resources which do not have the spec.ingressClassName field set:
   watchIngressWithoutClass: true
 
-  publishService:
-    enabled: false
-  
-  service:
+  kind: "DaemonSet"
+  hostPort:
     enabled: true
+    ports:
+      http: 80
+      https: 443
+
+  service:
     type: ClusterIP
 
   metrics:
     enabled: true
-    # Configure this serviceMonitor section AFTER Rancher Monitoring is enabled!
-    #serviceMonitor:
-    #  enabled: true
+    serviceMonitor:
+      enabled: true
 
   serviceAccount:
     create: true
@@ -862,17 +853,17 @@ As our Nginx ingress controller runs in host namespace and uses host ports, it c
 ```bash
 kubectl create namespace ingress-nginx
 kubectl label namespace ingress-nginx pod-security.kubernetes.io/enforce=privileged
-kubectl label namespace ingress-nginx pod-security.kubernetes.io/enforce-version=v1.23
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/enforce-version=v1.27
 kubectl label namespace ingress-nginx pod-security.kubernetes.io/audit=privileged
-kubectl label namespace ingress-nginx pod-security.kubernetes.io/audit-version=v1.23
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/audit-version=v1.27
 kubectl label namespace ingress-nginx pod-security.kubernetes.io/warn=privileged
-kubectl label namespace ingress-nginx pod-security.kubernetes.io/warn-version=v1.23
+kubectl label namespace ingress-nginx pod-security.kubernetes.io/warn-version=v1.27
 ```
 
 Finally, install the Nginx ingress controller helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
-  --version 4.1.4 \
+helm upgrade -i --create-namespace nginx ingress-nginx/ingress-nginx \
+  --version 4.7.1 \
   --namespace ingress-nginx \
   -f values.yaml
 ```
@@ -880,7 +871,7 @@ helm upgrade -i --create-namespace --atomic nginx ingress-nginx/ingress-nginx \
 Sources:
 - https://kubernetes.github.io/ingress-nginx/deploy/#using-helm
 - https://github.com/kubernetes/ingress-nginx/tree/master/charts/ingress-nginx
-- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.0.13/charts/ingress-nginx
+- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.7.1/charts/ingress-nginx
 
 ## Cert-Manager
 
@@ -888,25 +879,25 @@ Sources:
 Prepare & add the Helm chart repo:
 ```bash
 helm repo add jetstack https://charts.jetstack.io
-helm repo update
+helm repo update jetstack
 ```
 
 ### Cert-Manager Installation
 Install the Cert-Manager controller helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic cert-manager jetstack/cert-manager \
+helm upgrade -i --create-namespace cert-manager jetstack/cert-manager \
   --namespace cert-manager \
-  --set installCRDs=true \
-  --version v1.8.1
+  --set installCRDs=false \
+  --version v1.12.4
 ```
 
 Verification:
 ```
 $ kubectl get pods --namespace cert-manager
 NAME                                       READY   STATUS    RESTARTS   AGE
-cert-manager-74f46787b6-548rg              1/1     Running   0          78s
-cert-manager-cainjector-748dc889c5-qhlqf   1/1     Running   0          78s
-cert-manager-webhook-5b679f47d6-8ddcl      1/1     Running   0          78s
+cert-manager-5468bbb5fd-rpshg              1/1     Running   0          29s
+cert-manager-cainjector-6f455799dd-kglxp   1/1     Running   0          29s
+cert-manager-webhook-54bd8d56d6-k8j5d      1/1     Running   0          29s
 ```
 
 Sources:
@@ -975,8 +966,8 @@ Verification:
 ```bash
 $ k get clusterissuer
 NAME                               READY   AGE
-lets-encrypt-dns01-production-do   True    3m51s
-lets-encrypt-dns01-staging-do      True    3m51s
+lets-encrypt-dns01-production-do   True    5s
+lets-encrypt-dns01-staging-do      True    5s
 ```
 
 Sources:
@@ -996,7 +987,7 @@ Prepare & add the Helm chart repo:
 ```bash
 mkdir ~/rke2/external-dns
 helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo update
+helm repo update bitnami
 ```
 
 ### External-DNS Installation
@@ -1011,21 +1002,22 @@ digitalocean:
 
 Finally, install the External-DNS helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic external-dns bitnami/external-dns \
-  --version 6.5.6 \
+helm upgrade -i --create-namespace external-dns bitnami/external-dns \
+  --version 6.24.1 \
   --namespace external-dns \
   -f values.yaml
 ```
 
 Verification:
 ```bash
-kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
+$ kubectl --namespace=external-dns get pods -l "app.kubernetes.io/name=external-dns,app.kubernetes.io/instance=external-dns"
+NAME                            READY   STATUS    RESTARTS   AGE
+external-dns-76f6458459-7nbd4   1/1     Running   0          12s
 ```
 
-## Rancher (2.6.5)
+## Rancher (2.8.0)
 
-Sources:
-- https://rancher.com/docs/rancher/v2.6/en/installation/install-rancher-on-k8s/
+**Important:** Rancher 2.7.x doesn't support Kubernetes 1.27 or 1.28. Wait until Rancher v2.8.0 is released. More details on this here: https://github.com/rancher/rancher/issues/41791
 
 ### Rancher Prerequisites
 Prepare & add the Helm chart repo:
@@ -1033,7 +1025,7 @@ Prepare & add the Helm chart repo:
 ```bash
 mkdir ~/rke2/rancher
 helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
-helm repo update
+helm repo update rancher-latest
 ```
 
 ### Rancher Installation
@@ -1061,11 +1053,11 @@ kubectl apply -f certificate.yaml
 ```
 
 Verify the Certificate:
-```
+```bash
 # Wait a few seconds up to a few minutes
 $ kubectl get certificate -n cattle-system
 NAME                  READY   SECRET                AGE
-tls-rancher-ingress   True    tls-rancher-ingress   2m18s
+tls-rancher-ingress   True    tls-rancher-ingress   2m31s
 ```
 
 Create a `values.yaml` file with the following configuration:
@@ -1082,8 +1074,8 @@ bootstrapPassword: <super-secret-generated-password-here>
 
 Finally, install the Rancher helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic rancher rancher-latest/rancher \
-  --version 2.6.5 \
+helm upgrade -i --create-namespace rancher rancher-latest/rancher \
+  --version 2.8.0 \
   --namespace cattle-system \
   -f values.yaml
 ```
@@ -1098,696 +1090,168 @@ deployment "rancher" successfully rolled out
 ![Rancher Dashboard with official Let's Encrypt Certificate](images/rancher-dashboard-with-cert.png)
 
 Sources:
-- https://rancher.com/docs/rancher/v2.6/en/installation/install-rancher-on-k8s/chart-options/
+- https://rancher.com/docs/rancher/v2.8/en/installation/install-rancher-on-k8s/chart-options/
 - https://github.com/rancher/rancher/issues/26850#issuecomment-658644922
+- https://rancher.com/docs/rancher/v2.8/en/installation/install-rancher-on-k8s/
 
-### Rancher Backups
-Rancher 2.5+ now comes with a [rancher-backup](https://github.com/rancher/charts/tree/main/charts/rancher-backup) which can backup/restore all K8s and CRD resources that Rancher creates and manages.
-Backup target can be a Persistent Volume or a S3 bucket.
+## Grafana
 
-Sources:
-- https://rancher.com/docs/rancher/v2.x/en/backups/v2.5/
-
-#### Rancher Backups Installation
-Select the `local` cluster, navigate to the "App & Marketplace" -> "Charts" menu and search for the "Rancher Backups" chart. Configure the settings down here:
-
-![Rancher Backups Settings 1](images/rancher-backups-settings-1.png)
-![Rancher Backups Settings 2](images/rancher-backups-settings-2.png)
-
-Next, change the Rancher Backups PersistentVolume reclaim policy to `Retain` (since the `nfs` Storageclass uses `Delete` by default):
-
-```bash
-kubectl patch pv <rancher-backup-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-```
-Example:
-```
-$ kubectl patch pv pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-```
-
-Verification:
-```
-# Before
-$ kubectl get pv
-NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
-pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2   10Gi       RWO            Delete           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     29s
-# Change Retention Policy
-$ kubectl patch pv pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-persistentvolume/pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2 patched
-# After
-$ kubectl get pv
-NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                             STORAGECLASS   REASON   AGE
-pvc-4dee7ec8-2ef9-4e8b-9dd0-10e093c192a2   10Gi       RWO            Retain           Bound    cattle-resources-system/rancher-backup-1                                                                          nfs                     56s
-```
-
-Finally, navigate to the "Rancher Backups" menu and configure a new scheduled backup job or simply create a new CR which does basically the same:
-
-```yaml
-apiVersion: resources.cattle.io/v1
-kind: Backup
-metadata:
-  name: default-backup-all
-  annotations:
-    field.cattle.io/description: 'Backups everything every 2h (retention: 2 weeks)'
-spec:
-  encryptionConfigSecretName: 
-  resourceSetName: rancher-resource-set
-  retentionCount: 168
-  schedule: 0 */2 * * *
-```
-
-More backup YAML examples can be found here: https://rancher.com/docs/rancher/v2.6/en/backups/configuration/backup-config/
-
-Verification:
-![Rancher Backup Job](images/rancher-backup-job.png)
-
-### Rancher Monitoring
-Since the new Rancher 2.5+ monitoring is already based on the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) I will simply use this one instead of using the upstream kube-prometheus-stack Helm chart.
-
-As Rancher Monitoring needs advanced privileges regarding the PSS policy, it can't comply with our default PSS policy `baseline`. We therefore create the main Rancher Monitoring namespace (`cattle-monitoring-system`) before installing the actual App (Helm chart) so we are able to already set its PSS policy to `privileged`:
-
-```bash
-kubectl create namespace cattle-monitoring-system
-kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/enforce=privileged
-kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/enforce-version=v1.23
-kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/audit=privileged
-kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/audit-version=v1.23
-kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/warn=privileged
-kubectl label namespace cattle-monitoring-system pod-security.kubernetes.io/warn-version=v1.23
-```
-
-Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "Monitoring" chart. Leave nearly all settings default but enable persistent storage for Prometheus:
-
-![Rancher Monitoring Settings Prometheus](images/rancher-monitoring-settings-prometheus.png)
-![Rancher Monitoring Settings Grafana](images/rancher-monitoring-settings-grafana.png)
-
-Also click on `Edit YAML` and search for the `rke2Proxy` section to disable it:
-```yaml
-rke2Proxy:
-  enabled: false
-```
-(We simply can't use the kube-proxy metrics target since we disabled it completely ("kube-proxy less" Cilium).)
-
-Also remove the whole `rke2IngressNginx.client.affinity` section as we run everything on a single node.
-
-Next, disable `rke2ingressNginx` as we are also not using this component:
-```yaml
-rke2ingressNginx:
-  enabled: false
-```
-
-Continue by searching for the psp settings and disable them:
-```yaml
-global:
-  rbac:
-    pspEnabled: false
-prometheus-adapter:
-  psp:
-    create: false
-```
-
-Finally, click "Install" and wait a few minutes.
-
-**Note:** If you run into a `StorageClass "nfs": claim Selector is not supported` issue (shown as event on the Prometheus PVC), try to manually remove the empty `selector` section from `prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec`, delete the PVC and re-run the Rancher Monitoring installation (see [issues/29755](https://github.com/rancher/rancher/issues/29755#issuecomment-717997959) for more information).
-
-**Hints:**
-- Ensure to open `9796/TCP` on the node since the RKE2 deployed node-exporter provides the Rancher Monitoring metrics via this port.
-- Ensure all Prometheus targets are healthy by navigating to "Monitoring" -> "Overview" -> "Prometheus Targets".
-- If the Grafana pod does not come up properly, ensure your NFS share squash settings allow the Grafana init container to change the ownership of files/directories inside its NFS based PV.
-
-Sources:
-- https://rancher.com/docs/rancher/v2.6/en/monitoring-alerting/
-
-#### Cilium & Nginx Ingress Monitoring
-Since we now have deployed the Prometheus stack, we should be able to enable the Cilium & Nginx ingress monitoring, which are also based on the `ServiceMonitor` CRDs from the Prometheus stack. Add the following properties to the Cilium `values.yaml` file and redeploy it (keep all other values as shown before):
-
-```yaml
-hubble:
-  metrics:
-    serviceMonitor:
-      enabled: true
-
-operator:
-  prometheus:
-    enabled: true
-    port: 6942
-    serviceMonitor:
-      enabled: true
-
-prometheus:
-  serviceMonitor:
-    enabled: true
-```
-
-**Hint:** Ensure to open `9090/TCP`, `9091/TCP` and `6942/TCP` on the node since cilium exposes the Prometheus metrics on these ports.
-
-Do the same with the Nginx ingress by changing the values down here:
-```yaml
-controller:
-  metrics:
-    serviceMonitor:
-      enabled: true
-```
-
-#### Cilium Grafana Dashboards
-There are currently 3 public available Grafana Dashboards from Cilium:
-
-- [Cilium v1.11 Agent Metrics](https://grafana.com/grafana/dashboards/15513)
-- [Cilium v1.11 Hubble Metrics](https://grafana.com/grafana/dashboards/15515)
-- [Cilium v1.11 Operator Metrics](https://grafana.com/grafana/dashboards/15514)
-
-Download the JSONs, replace the default datasource `${DS_PROMETHEUS}` to `Prometheus` and create ConfigMaps from them:
-```bash
-sed -i 's/${DS_PROMETHEUS}/Prometheus/g' cilium-agent-metrics.json
-sed -i 's/${DS_PROMETHEUS}/Prometheus/g' cilium-hubble-metrics.json
-sed -i 's/${DS_PROMETHEUS}/Prometheus/g' cilium-operator-metrics.json
-kubectl create configmap -n cattle-dashboards grafana-cilium-agent-metrics-cm --from-file=cilium-agent-metrics.json=cilium-agent-metrics.json
-kubectl create configmap -n cattle-dashboards grafana-cilium-hubble-metrics-cm --from-file=cilium-hubble-metrics.json=cilium-hubble-metrics.json
-kubectl create configmap -n cattle-dashboards grafana-cilium-operator-metrics-cm --from-file=cilium-operator-metrics.json=cilium-operator-metrics.json
-```
-
-Next, label the dashboard JSONs so Grafana takes them up:
-```bash
-kubectl label configmap -n cattle-dashboards grafana-cilium-agent-metrics-cm grafana_dashboard=1
-kubectl label configmap -n cattle-dashboards grafana-cilium-hubble-metrics-cm grafana_dashboard=1
-kubectl label configmap -n cattle-dashboards grafana-cilium-operator-metrics-cm grafana_dashboard=1
-```
-
-Finally, restart the Grafana pod so the newly created Cilium dashboards:
-
-```bash
-kubectl rollout restart deployment -n cattle-monitoring-system rancher-monitoring-grafana
-```
-
-![Cilium v1.11 Agent Metrics Grafana Dashboard](images/cilium-agent-metrics-grafana.png)
-
-Sources:
-- https://rancher.com/docs/rancher/v2.6/en/monitoring-alerting/
-
-#### Custom Nginx Ingress & Cluster Capacity Management Dashboard
-When installing the Prometheus stack, I also often deploy some other nice Grafana Dashboards like this one for the Nginx ingress:
-
-![Nginx Ingress Gafana Dashboard](images/nginx-dashboard.png)
-
-.. or this one for the cluster capacity management:
-
-![Cluster Capacity Management Grafana Dashboard](images/capacity-dashboard.png)
-
-If you want these dashboards too, just use the provided manifests:
-
-```bash
-kubectl apply -f manifests/nginx-dashboard.yaml
-kubectl apply -f manifests/capacity-monitoring-dashboard.yaml
-```
-
-
-### Rancher Logging
-Rancher Logging is capable to collect, filter and output logs to different logging backend like ElastiSearch, Splunk, Syslog, Loki, etc. It's based on the [BanzaiCloud Logging Operator](https://github.com/banzaicloud/logging-operator).
-
-**Important:** Implement the following SElinux workaround (if SElinux is enabled) as there is currently an open issue (see [here](https://github.com/rancher/rancher/issues/34387) and [here](https://github.com/rancher/charts/issues/1596)) related to a [wrongly used SElinux type](https://github.com/rancher/charts/blob/dev-v2.6/charts/rancher-logging/100.1.1%2Bup3.17.3/templates/loggings/rke2/daemonset.yaml#L26) (`rke_logreader_t`): https://github.com/rancher/charts/issues/1596#issuecomment-1122775136
-
-```bash
-sudo dnf -y install policycoreutils-devel
-cat <<EOF >> rke2_logging_bodge.te
-module rke2_logging_bodge 1.0;
-
-require {
-        type container_logreader_t;
-
-        type container_log_t;
-        type syslogd_var_run_t;
-        class lnk_file { read getattr };
-        class dir { read };
-}
-
-typealias container_logreader_t alias rke_logreader_t;
-
-allow container_logreader_t container_log_t:lnk_file { read getattr };
-allow container_logreader_t syslogd_var_run_t:dir { read };
-EOF
-make -f /usr/share/selinux/devel/Makefile rke2_logging_bodge.pp
-sudo semodule -i rke2_logging_bodge.pp
-```
-
-Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "Logging" chart. In the YAML editor, set the variable `global.seLinux.enabled` to `true` and the variable `monitoring.serviceMonitor.enabled` to `true`. Also reconfigure `fluentd.resources`. Configure the following values there, as the default memory limit is often not enough:
-
-```yaml
-fluentd:
-  resources:
-    limits:
-      cpu: "1"
-      memory: 1Gi
-    requests:
-      cpu: 500m
-      memory: 100M
-```
-
-Next, search for the psp settings and disable them:
-```yaml
-global:
-  psp:
-    enabled: false
-rbac:
-  psp:
-    enabled: false
-```
-
-Finally, install it.
-
-#### Configure ClusterOutput
-The `ClusterOutput` defines a logging backend where fluentd and fluentbit can send logs to.
-
-Preparation:
-```bash
-mkdir ~/rke2/rancher-logging
-```
-
-Create the following YAML (`clusteroutput-loki.yaml`):
-```yaml
-apiVersion: logging.banzaicloud.io/v1beta1
-kind: ClusterOutput
-metadata:
-  name: loki
-  namespace: cattle-logging-system
-spec:
-  loki:
-    configure_kubernetes_labels: true
-    extract_kubernetes_labels: true
-    url: http://loki-stack.loki.svc.cluster.local:3100
-```
-
-Apply the just created YAML:
-```bash
-kubectl apply -f clusteroutput-loki.yaml
-```
-
-#### Configure ClusterFlow
-Flow defines a logging flow with filters and outputs. This means that it connects the filtered logs to the output where to send them.
-
-Create the following YAML (`clusterflow-loki.yaml`) to collect and send all logs to Loki:
-```yaml
-apiVersion: logging.banzaicloud.io/v1beta1
-kind: ClusterFlow
-metadata:
-  name: loki
-  namespace: cattle-logging-system
-spec:
-  globalOutputRefs:
-    - loki
-  match:
-    - select: {}
-```
-
-Apply the just created YAML:
-```bash
-kubectl apply -f clusterflow-loki.yaml
-```
-
-Sources:
-- https://rancher.com/docs/rancher/v2.6/en/logging/
-- https://rancher.com/docs/rancher/v2.6/en/logging/custom-resource-config/outputs/
-
-## Loki Logging Backend
-Loki is used to store container and platform logs received from Rancher Loggings' fluentd instance.
-
-Sources:
-- https://github.com/grafana/helm-charts/tree/main/charts/loki-stack
-- https://rancher.com/government/enhancing-your-rancher-monitoring-experience-with-grafana-loki
-- https://awesome-prometheus-alerts.grep.to/rules.html#loki-1
-
-### Loki Prerequisites
+### Grafana Prerequisites
 Prepare & add the Helm chart repo:
 
 ```bash
-mkdir ~/rke2/loki
+mkdir ~/rke2/grafana
 helm repo add grafana https://grafana.github.io/helm-charts
-helm repo update
+helm repo update grafana
 ```
 
-### Loki Installation
+### Grafana Installation
 Create a `values.yaml` file with the following configuration:
 ```yaml
-promtail:
-  enabled: false
-
-loki:
-  enabled: true
-  rbac:
-    pspEnabled: false
-  persistence:
+adminPassword: <generate-top-secret-pw>
+sidecar:
+  dashboards:
     enabled: true
-    size: 20Gi
-  config:
-    compactor:
-      retention_enabled: true
-  serviceMonitor:
-    enabled: true
-    prometheusRule:
-      enabled: true
-      rules:
-      #Some examples from https://awesome-prometheus-alerts.grep.to/rules.html#loki
-      - alert: LokiProcessTooManyRestarts
-        expr: changes(process_start_time_seconds{job=~"loki"}[15m]) > 2
-        for: 0m
-        labels:
-          severity: warning
-        annotations:
-          summary: Loki process too many restarts (instance {{ $labels.instance }})
-          description: "A loki process had too many restarts (target {{ $labels.instance }})\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
-      - alert: LokiRequestErrors
-        expr: 100 * sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[1m])) by (namespace, job, route) / sum(rate(loki_request_duration_seconds_count[1m])) by (namespace, job, route) > 10
-        for: 15m
-        labels:
-          severity: critical
-        annotations:
-          summary: Loki request errors (instance {{ $labels.instance }})
-          description: "The {{ $labels.job }} and {{ $labels.route }} are experiencing errors\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
-      - alert: LokiRequestPanic
-        expr: sum(increase(loki_panic_total[10m])) by (namespace, job) > 0
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: Loki request panic (instance {{ $labels.instance }})
-          description: "The {{ $labels.job }} is experiencing {{ printf \"%.2f\" $value }}% increase of panics\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
-      - alert: LokiRequestLatency
-        expr: (histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket{route!~"(?i).*tail.*"}[5m])) by (le)))  > 1
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: Loki request latency (instance {{ $labels.instance }})
-          description: "The {{ $labels.job }} {{ $labels.route }} is experiencing {{ printf \"%.2f\" $value }}s 99th percentile latency\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
-```
-
-Finally, install the Loki helm chart:
-```bash
-helm upgrade -i --create-namespace --atomic loki-stack grafana/loki-stack \
-  --version 2.6.4 \
-  --namespace loki \
-  -f values.yaml
-```
-
-### Add Loki Source to Grafana
-In order to add Loki as datasource in Grafana, simply create the following ConfigMap (`cm-loki-datasource.yaml`) inside the `cattle-monitoring-system` Namespace and ensure it has the label `grafana_datasource=1` set:
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-loki-datasource
-  namespace: cattle-monitoring-system
-  labels:
-    grafana_datasource: "1"
-data:
-  loki-stack-datasource.yaml: |-
+    label: grafana_dashboard
+    labelValue: "1"
+    searchNamespace: ALL
+    folderAnnotation: grafana_folder
+    provider:
+      foldersFromFilesStructure: true
+datasources:
+  datasources.yaml:
     apiVersion: 1
     datasources:
-    - name: Loki
-      type: loki
+    - name: prometheus
+      type: prometheus
+      url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local.:9090
       access: proxy
-      url: http://loki-stack.loki.svc.cluster.local:3100
-      version: 1
-```
-
-Finally apply it and restart Grafana to pick the source up:
-```bash
-# Apply:
-kubectl apply -f cm-loki-datasource.yaml
-# Grafana Pod restart:
-kubectl rollout restart -n cattle-monitoring-system deployment rancher-monitoring-grafana
-```
-
-#### Explore logs
-In Grafana, navigate to the "Explore" menu and in the top left corner change the datasource from "Prometheus" to "Loki".
-
-Paste the below query in the log browser to test if logs are visible.
-
-```json
-{app="prometheus"}
-```
-
-![Loki logs shown in Grafana Explore](images/TODO.png)
-
-## OPA Gatekeeper
-
-### OPA Gatekeeper Installation
-Navigate to the "App & Marketplace" -> "Charts" menu in Rancher and search for the "OPA Gatekeeper" chart. Leave nearly all settings default except the following ones:
-
-```yaml
-psp:
-  enabled: false
-controllerManager:
-  exemptNamespacePrefixes:
-  - "kube-*"
-  - "cattle-*"
-  - "fleet-*"
-```
-
-Now, click "Install" and wait a few minutes.
-Finally, apply the following `config.gatekeeper.sh/v1alpha1` config to ensure important control plane namespaces are excluded from OPA Gatekeeper evaluation:
-
-```yaml
-apiVersion: config.gatekeeper.sh/v1alpha1
-kind: Config
-metadata:
-  name: config
-  namespace: "gatekeeper-system"
-spec:
-  match:
-    - excludedNamespaces: ["kube-*", "cattle-*", "fleet-*"]
-      processes: ["*"]
-```
-
-Sources:
-- https://rancher.com/docs/rancher/v2.6/en/opa-gatekeper/
-- https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces/
-
-### Applying OPA Gatekeeper Constraints
-The next step for OPA Gatekeeper would be to apply `ConstraintTemplates` and `Constraints` to enforce/audit specific policies. Luckily, there's a [maintained library for such policies](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library) which helps enormously since we do not have to reinvent the wheel.
-To have the exact same security measurements in place as before with PSPs one has to also add OPA Gatekeeper constraints for the following scenarios (as they are not handley by [the `baseline` Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/#baseline)):
-- [allow-privilege-escalation](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/allow-privilege-escalation)
-- [volumes](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/volumes)
-- [users](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/users)
-- [flexvolume-drivers](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/flexvolume-drivers)
-
-If you want to do that, apply each `template.yaml` from the linked paths above and slightly adjust the `sample/*/constraint.yaml` according to your needs before also applying them.
-
-## Kanister Backup & Restore
-TODO
-
-# Application Components
-
-## Harbor Registry
-
-### Harbor Registry Prerequisites
-Prepare & add the Helm chart repo:
-
-```bash
-mkdir ~/rke2/harbor
-helm repo add harbor https://helm.goharbor.io
-helm repo update
-```
-
-### Rancher Installation
-Create a `values.yaml` file with the following configuration:
-```yaml
-expose:
-  tls:
-    certSource: secret
-    secret:
-      secretName: "tls-harbor-cert"
-      notarySecretName: "tls-notary-cert"
-  ingress:
-    hosts:
-      core: registry.example.com
-      notary: notary.example.com
-    annotations:
-      cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
-
-externalURL: https://registry.example.com
-
-internalTLS:
-  enabled: true
-
+      isDefault: true
 persistence:
-  persistentVolumeClaim:
-    registry:
-      size: 100Gi
-    chartmuseum:
-      size: 20Gi
-    jobservice:
-      size: 5Gi
-    database:
-      size: 5Gi
-    redis:
-      size: 5Gi
-    trivy:
-      size: 5Gi
-
-# The initial password of Harbor admin. Change it from portal after launching Harbor
-harborAdminPassword: "secure long password here"
-
-# The secret key used for encryption. Must be a string of 16 chars.
-secretKey: "secure long secret here"
-
-registry:
-  credentials:
-    password: "secure long password here"
-
-database:
-  internal:
-    password: "secure long password here"
-
-metrics:
   enabled: true
-  serviceMonitor:
-    enabled: true
+  size: 2Gi
+  storageClassName: nfs
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
+  ingressClassName: nginx
+  hosts:
+  - grafana.example.com
+  tls:
+  - secretName: grafana-tls
+    hosts:
+    - grafana.example.com
 ```
 
-Finally, install the Harbor helm chart:
+Finally, install the Grafana helm chart:
 ```bash
-helm upgrade -i --create-namespace --atomic harbor harbor/harbor \
-  --version v1.9.1 \
-  --namespace harbor \
+helm upgrade -i grafana grafana/grafana \
+  --create-namespace \
+  -n monitoring \
+  --version 6.59.1 \
   -f values.yaml
 ```
 
 Verification:
-![Harbor Web UI with valid certificate](images/harbor.png)
-
-# Deprecated Sections
-This chapter will contain sections which were once installed but never really used. Because of that, I won't update them anymore.
-
-## GitOps using Fleet
-I first wanted to use ArgoCD to deploy applications with the GitOps approach on the K8s cluster, but then I realized, Rancher 2.5+ already comes with Fleet preinstalled and that it also offers a quite nice UI integration. I therefore chose to give Fleet a try.
+```bash
+$ kubectl get pods --namespace monitoring
+NAME                       READY   STATUS    RESTARTS   AGE
+grafana-6b7f6b6dd7-2x5hg   2/2     Running   0          82s
+```
 
 Sources:
-- https://rancher.com/docs/rancher/v2.x/en/deploy-across-clusters/fleet
-- https://fleet.rancher.io/
-- https://github.com/rancher/fleet-examples/
+- https://github.com/grafana/helm-charts
 
-### Fleet Installation
-No Fleet installation is required since Rancher 2.5+ already installed this app inside the `fleet-system` namespace.
+
+## Kube-Prometheus-Stack
+
+### Kube-Prometheus-Stack Prerequisites
+Prepare & add the Helm chart repo:
+
+```bash
+mkdir ~/rke2/prometheus
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update prometheus-community
+```
+
+Apply PSA `privileged` to the `monitoring` namespace as Node Exporter needs `hostPath` mounts to extract metrics:
+```bash
+kubectl label namespace monitoring pod-security.kubernetes.io/enforce=privileged
+kubectl label namespace monitoring pod-security.kubernetes.io/enforce-version=v1.27
+kubectl label namespace monitoring pod-security.kubernetes.io/audit=privileged
+kubectl label namespace monitoring pod-security.kubernetes.io/audit-version=v1.27
+kubectl label namespace monitoring pod-security.kubernetes.io/warn=privileged
+kubectl label namespace monitoring pod-security.kubernetes.io/warn-version=v1.27
+```
+
+### Kube-Prometheus-Stack Installation
+Create a `values.yaml` file with the following configuration:
+```yaml
+# Disable kube-proxy because we use Cilium KubeProxyReplacement
+kubeProxy:
+  enabled: false
+# The following components are disable because we didn't configure kubeadm to expose those metric endpoints to far:
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
+    hosts:
+    - prometheus.example.com
+    tls:
+    - secretName: prometheus-tls
+      hosts:
+      - prometheus.example.com
+  # We only deploy a single Prometheus. This one should therefore watch for all CRs.
+  prometheusSpec:
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
+    hosts:
+    - alertmanager.example.com
+    tls:
+    - secretName: alertmanager-tls
+      hosts:
+      - alertmanager.example.com
+```
+
+Finally, install the Kube-Prometheus-Stack helm chart:
+```bash
+helm upgrade -i kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --skip-crds \
+  --create-namespace \
+  -n monitoring \
+  --version 50.3.0 \
+  -f values.yaml
+```
 
 Verification:
-```
-$ kubectl -n fleet-system logs -l app=fleet-controller
-<output truncated>
-time="2020-12-28T12:45:34Z" level=info msg="Cluster registration fleet-local/request-w8hv7, cluster fleet-local/local granted [true]"
-$ kubectl -n fleet-system get pods -l app=fleet-controller
-NAME                                READY   STATUS    RESTARTS   AGE
-fleet-controller-767b564d9f-fshp6   1/1     Running   0          2m35s
-```
-
-### Fleet Configuration
-To manage the RKE2 `local` cluster, you need to switch to the `fleet-local` namespace as the `local` cluster should already be added there since Rancher 2.5+ automatically deployed a fleet-agent in it:
-
-```
-$ kubectl get clusters.fleet.cattle.io -A
-NAMESPACE     NAME    BUNDLES-READY   NODES-READY   SAMPLE-NODE             LAST-SEEN              STATUS
-fleet-local   local   1/1             1/1           node1.example.com   2020-12-28T12:45:52Z
-```
-
-![Fleet local Cluster](images/fleet-local-cluster.png)
-
-The final fleet basic configuration step is to add a Git repository, which is later used to store the Fleet managed manifests. I chose to also host this on Github inside the private https://github.com/PhilipSchmid/home-lab-fleet-manifests repository.
-
-To allow Fleet to access a private Git repository, you must create a SSH key, which is then added as the deployment key. More information about this process can be found here: https://fleet.rancher.io/gitrepo-add/
-
 ```bash
-mkdir ~/rke2/fleet
-cd ~/rke2/fleet
-
-ssh-keygen -t rsa -b 4096 -m pem -C "Fleet" -f fleet_id_rsa
-ssh-keyscan -H github.com 2>/dev/null > github_knownhost
-
-kubectl create secret generic fleet-github-ssh-key \
-  -n fleet-local \
-  --from-file=ssh-privatekey=fleet_id_rsa \
-  --from-file=known_hosts=github_knownhost \
-  --type=kubernetes.io/ssh-auth 
-```
-
-Do not forget to add the just generated public key as deploy key on the Github Git repository (read permissions should be sufficient)
-
-Finally, it's time to configure the GitRepo CR (`home-lab-fleet-manifests.yaml`):
-```yaml
-apiVersion: fleet.cattle.io/v1alpha1
-kind: GitRepo
-metadata:
-  name: home-lab-fleet-manifests
-  namespace: fleet-local
-spec:
-  repo: git@github.com:PhilipSchmid/home-lab-fleet-manifests.git
-  clientSecretName: fleet-github-ssh-key
-  paths:
-  - /minio
-  - /harbor
-```
-
-```bash
-kubectl apply -f home-lab-fleet-manifests.yaml
+$ kubectl get pods --namespace monitoring
+NAME                                                        READY   STATUS    RESTARTS   AGE
+alertmanager-kube-prometheus-stack-alertmanager-0           2/2     Running   0          18m
+grafana-64446977f6-bhj8v                                    2/2     Running   0          97s
+kube-prometheus-stack-grafana-696495cfc8-n75fp              3/3     Running   0          18m
+kube-prometheus-stack-kube-state-metrics-776cff966c-dnjvq   1/1     Running   0          18m
+kube-prometheus-stack-operator-68688565f4-2w4wv             1/1     Running   0          18m
+prometheus-kube-prometheus-stack-prometheus-0               2/2     Running   0          18m
 ```
 
 Sources:
-- https://fleet.rancher.io/gitrepo-add/
-
-## Application Component Deployments using Fleet
-Deployed via GitOps (Fleet).
-
-Sources:
-- https://fleet.rancher.io/gitrepo-structure/
-
-### Minio Object Storage
-Create a `minio/fleet.yaml` file inside the `home-lab-fleet-manifests` Git repository:
-
-```yaml
-defaultNamespace: fleet-app-minio
-helm:
-  chart: minio
-  repo: https://helm.min.io/
-  releaseName: minio
-  version: 8.0.8
-  values:
-    ingress: 
-      enabled: "true"
-      hosts:
-      - minio.example.com
-      tls:
-      - hosts:
-        - minio.example.com
-      annotations:
-        nginx.ingress.kubernetes.io/proxy-body-size: 5G
-        cert-manager.io/cluster-issuer: lets-encrypt-dns01-production-do
-    persistence: 
-      size: "100Gi"
-      storageClass: "nfs-client"
-      accessMode: ReadWriteMany
-    metrics:
-      serviceMonitor:
-        enabled: true
-diff:
-  comparePatches:
-  - apiVersion: networking.k8s.io/v1beta1
-    kind: Ingress
-    name: minio
-    namespace: fleet-app-minio
-    operations:
-    - {"op":"remove", "path":"/spec/rules/0/http/paths"}
-```
-
-**Note:** The `diff.comparePatches` section is required since Fleet would otherwise recognize the Minio Helm chart created Ingress object as `modified` all the time. Error: `Modified(1) [Cluster fleet-local/local]; ingress.networking.k8s.io fleet-app-minio/minio modified {"spec":{"rules":[{"host":"minio.example.com","http":{"paths":[{"backend":{"serviceName":"minio","servicePort":9000},"path":"/"}]}}]}}`
-
-Finally, push this `fleet.yaml` file to the repositories `master` branch. Fleet should then automatically start to deploy the Minio application via the specified Helm chart.
-
-![Fleet Minio Deployment](images/rancher-fleet-minio-git-repo-active.png)
-
-To get the Minio secret and access key, issue the following commands:
-```bash
-kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.accesskey}' | base64 -d
-kubectl get secret -n fleet-app-minio minio -o jsonpath='{.data.secretkey}' | base64 -d
-```
-
-Sources:
-- https://github.com/minio/charts
-- https://github.com/minio/charts#existing-secret
-- https://github.com/rancher/fleet-examples/blob/c6e54d7a56565e52a63de8a2088997b46253c1fb/single-cluster/helm-multi-chart/rancher-monitoring/fleet.yaml#L6
+- https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack

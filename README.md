@@ -29,6 +29,7 @@ The technologies down here will probably change in the future. Nevertheless, the
 - [Prerequisites](#prerequisites)
   - [Host OS](#host-os)
     - [Disable Swap](#disable-swap)
+    - [Disk Space](#disk-space)
   - [Working Directory](#working-directory)
   - [Kubectl, Helm \& RKE2](#kubectl-helm--rke2)
 - [K8s Cluster Setup](#k8s-cluster-setup)
@@ -84,14 +85,28 @@ Download Rocky Linux 9.1 from https://rockylinux.org/download and install it usi
 ```bash
 free -h
 sudo swapoff -a
-sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
+sudo sed -i.bak -r 's/(.+ swap .+)/#\1/' /etc/fstab
 free -h
 ```
+
+### Disk Space
+Ensure `/var/lib/` has enough space available (20GB+ for test/dev, 50GB+ for production). RKE2 will create `/var/lib/rancher` and store images etc. there:
+```bash
+df -h /var/lib
+```
+
+If not, symlink to another partition where's enough disk space available, e.g., `/mnt`:
+```bash
+sudo mkdir -p /mnt/rancher
+sudo ln -s /mnt/rancher /var/lib/rancher
+```
+
+**Caution:** Be aware that this change might cause SELinux issues if you have it enabled and `/mnt/rancher` doesn't have the same SELinux context.
 
 ## Working Directory
 Create a working directory where e.g. Helm `values.yaml` files will be stored in the future:
 ```bash
-mkdir ~/rke2
+mkdir -p ~/rke2
 cd ~/rke2
 ```
 
@@ -101,7 +116,7 @@ Install `kubectl`, `helm` and RKE2 to the host system:
 BINARY_DIR="/usr/local/bin"
 cd /tmp
 # Helm
-curl -LO https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
+curl -LO https://get.helm.sh/helm-v3.13.3-linux-amd64.tar.gz
 tar -zxvf helm-*-linux-amd64.tar.gz
 sudo mv linux-amd64/helm $BINARY_DIR/helm
 sudo chmod +x $BINARY_DIR/helm
@@ -123,17 +138,18 @@ curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_CHANNEL=v1.27 sh -
 ```
 
 Verification:
-```
+```bash
 # Helm
 $ helm version
-version.BuildInfo{Version:"v3.12.3", GitCommit:"3a31588ad33fe3b89af5a2a54ee1d25bfe6eaa5e", GitTreeState:"clean", GoVersion:"go1.20.7"}# Kubectl
+version.BuildInfo{Version:"v3.13.3", GitCommit:"c8b948945e52abba22ff885446a1486cb5fd3474", GitTreeState:"clean", GoVersion:"go1.20.11"}
+# Kubectl
 $ kubectl version --client=true
-Client Version: v1.28.1
+Client Version: v1.29.0
 Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
 # RKE2
 $ rke2 --version
-rke2 version v1.27.4+rke2r1 (3aaa57a9608206d95eeb9ce3f79c0ec2ea912b20)
-go version go1.20.5 X:boringcrypto
+rke2 version v1.27.9+rke2r1 (378bd59c4f0f97094c23c350d668f37f33aba406)
+go version go1.20.12 X:boringcrypto
 ```
 
 Optional: Install `kubectl` plugins `kubens`, `kubectx` and `tree` via [krew](https://krew.sigs.k8s.io/):
@@ -345,9 +361,9 @@ exclude=rke2-*
 This will cause the following packages to be kept back at this exact version as long as the `exclude` configuration is in place:
 ```
 $ sudo rpm -qa "*rke2*"
-rke2-selinux-0.14-1.el9.noarch
-rke2-common-1.27.4~rke2r1-0.el9.x86_64
-rke2-server-1.27.4~rke2r1-0.el9.x86_64
+rke2-selinux-0.17-1.el9.noarch
+rke2-common-1.27.9~rke2r1-0.el9.x86_64
+rke2-server-1.27.9~rke2r1-0.el9.x86_64
 ```
 
 Sources:
@@ -377,7 +393,7 @@ Verification:
 ```
 $ kubectl get nodes
 NAME                    STATUS     ROLES                       AGE    VERSION
-node1.example.com       NotReady   control-plane,etcd,master   79s    v1.27.4+rke2r1
+node1.example.com       NotReady   control-plane,etcd,master   79s    v1.27.9+rke2r1
 ```
 
 ## Troubleshooting RKE2
@@ -435,8 +451,8 @@ EOF'
 
 Prepare & add the Helm chart repo:
 ```bash
-cd ~/rke2
-mkdir cilium
+mkdir -p ~/rke2/cilium
+cd ~/rke2/cilium
 helm repo add cilium https://helm.cilium.io/
 helm repo update cilium
 ```
@@ -448,9 +464,9 @@ Sources:
 Install dependency CRDs:
 ```bash
 # Install Cert-Manager CRDs
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.1/cert-manager.crds.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.7/cert-manager.crds.yaml
 # Install Prometheus CRDs
-kubectl apply -f https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.67.1/stripped-down-crds.yaml
+kubectl apply -f https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.70.0/stripped-down-crds.yaml
 ```
 
 Create a `values.yaml` file with the following configuration:
@@ -573,7 +589,7 @@ ipv6:
 Finally install the Cilium helm chart:
 ```bash
 helm upgrade -i cilium cilium/cilium \
-  --version 1.14.1 \
+  --version 1.14.5 \
   --namespace kube-system \
   --set upgradeCompatibility=1.11 \
   -f values.yaml
@@ -583,7 +599,7 @@ helm upgrade -i cilium cilium/cilium \
 
 **Hint 2**: When upgrading from an older Cilium version, it's recommended to run the pre-flight check first:
 ```bash
-helm template cilium/cilium --version 1.14.1 \
+helm template cilium/cilium --version 1.14.5 \
   --namespace=kube-system \
   --set preflight.enabled=true \
   --set agent=false \
@@ -766,7 +782,8 @@ Sources:
 ### NFS-SubDir-External-Provisioner Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
-mkdir ~/rke2/nfs-subdir-external-provisioner
+mkdir -p ~/rke2/nfs-subdir-external-provisioner
+cd ~/rke2/nfs-subdir-external-provisioner
 helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
 helm repo update nfs-subdir-external-provisioner
 ```
@@ -809,7 +826,8 @@ The Nginx ingress controller is deployed as Daemonset within the host network na
 ### Nginx Ingress Controller Prerequisites
 Prepare & add the Helm chart repo:
 ```bash
-mkdir ~/rke2/ingress-nginx
+mkdir -p ~/rke2/ingress-nginx
+cd ~/rke2/ingress-nginx
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update ingress-nginx
 ```
@@ -863,7 +881,7 @@ kubectl label namespace ingress-nginx pod-security.kubernetes.io/warn-version=v1
 Finally, install the Nginx ingress controller helm chart:
 ```bash
 helm upgrade -i --create-namespace nginx ingress-nginx/ingress-nginx \
-  --version 4.7.1 \
+  --version 4.9.0 \
   --namespace ingress-nginx \
   -f values.yaml
 ```
@@ -871,7 +889,7 @@ helm upgrade -i --create-namespace nginx ingress-nginx/ingress-nginx \
 Sources:
 - https://kubernetes.github.io/ingress-nginx/deploy/#using-helm
 - https://github.com/kubernetes/ingress-nginx/tree/master/charts/ingress-nginx
-- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.7.1/charts/ingress-nginx
+- https://github.com/kubernetes/ingress-nginx/tree/helm-chart-4.9.0/charts/ingress-nginx
 
 ## Cert-Manager
 
@@ -888,11 +906,11 @@ Install the Cert-Manager controller helm chart:
 helm upgrade -i --create-namespace cert-manager jetstack/cert-manager \
   --namespace cert-manager \
   --set installCRDs=false \
-  --version v1.12.4
+  --version v1.12.7
 ```
 
 Verification:
-```
+```bash
 $ kubectl get pods --namespace cert-manager
 NAME                                       READY   STATUS    RESTARTS   AGE
 cert-manager-5468bbb5fd-rpshg              1/1     Running   0          29s
@@ -985,7 +1003,8 @@ Sources:
 Prepare & add the Helm chart repo:
 
 ```bash
-mkdir ~/rke2/external-dns
+mkdir -p ~/rke2/external-dns
+cd ~/rke2/external-dns
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update bitnami
 ```
@@ -1003,7 +1022,7 @@ digitalocean:
 Finally, install the External-DNS helm chart:
 ```bash
 helm upgrade -i --create-namespace external-dns bitnami/external-dns \
-  --version 6.24.1 \
+  --version 6.29.0 \
   --namespace external-dns \
   -f values.yaml
 ```
@@ -1017,13 +1036,12 @@ external-dns-76f6458459-7nbd4   1/1     Running   0          12s
 
 ## Rancher (2.8.0)
 
-**Important:** Rancher 2.7.x doesn't support Kubernetes 1.27 or 1.28. Wait until Rancher v2.8.0 is released. More details on this here: https://github.com/rancher/rancher/issues/41791
-
 ### Rancher Prerequisites
 Prepare & add the Helm chart repo:
 
 ```bash
-mkdir ~/rke2/rancher
+mkdir -p ~/rke2/rancher
+cd ~/rke2/rancher
 helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
 helm repo update rancher-latest
 ```
@@ -1049,7 +1067,7 @@ spec:
 Apply Certificate:
 ```bash
 kubectl create ns cattle-system
-kubectl apply -f certificate.yaml 
+kubectl apply -f certificate.yaml
 ```
 
 Verify the Certificate:
@@ -1081,7 +1099,7 @@ helm upgrade -i --create-namespace rancher rancher-latest/rancher \
 ```
 
 Verification:
-```
+```bash
 $ kubectl -n cattle-system rollout status deploy/rancher
 Waiting for deployment "rancher" rollout to finish: 0 of 1 updated replicas are available...
 deployment "rancher" successfully rolled out
@@ -1100,7 +1118,8 @@ Sources:
 Prepare & add the Helm chart repo:
 
 ```bash
-mkdir ~/rke2/grafana
+mkdir -p ~/rke2/grafana
+cd ~/rke2/grafana
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update grafana
 ```
@@ -1149,7 +1168,7 @@ Finally, install the Grafana helm chart:
 helm upgrade -i grafana grafana/grafana \
   --create-namespace \
   -n monitoring \
-  --version 6.59.1 \
+  --version 7.0.22 \
   -f values.yaml
 ```
 
@@ -1170,7 +1189,8 @@ Sources:
 Prepare & add the Helm chart repo:
 
 ```bash
-mkdir ~/rke2/prometheus
+mkdir -p ~/rke2/prometheus
+cd ~/rke2/prometheus
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update prometheus-community
 ```
@@ -1237,7 +1257,7 @@ helm upgrade -i kube-prometheus-stack prometheus-community/kube-prometheus-stack
   --skip-crds \
   --create-namespace \
   -n monitoring \
-  --version 50.3.0 \
+  --version 55.7.0 \
   -f values.yaml
 ```
 

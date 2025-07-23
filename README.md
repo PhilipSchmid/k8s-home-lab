@@ -1,3 +1,6 @@
+# Important Notice
+I archived this repository as I haven't been running this tech stack for years and mainly switched to Talos Linux as my go-to Kubernetes distribution.
+
 # Kubernetes in a Home Lab Environment
 This repository should contain all required steps, manifests and resources to set up a K8s in a home lab environment. Its status should be viewed as "work in progress" since I plan to improve various things in the future.
 
